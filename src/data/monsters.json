@@ -1,0 +1,90 @@
+[
+  {
+    "id": "bat",
+    "name": "박쥐",
+    "level": 1,
+    "color": "#9aa0a6",
+    "glyph": "🦇",
+    "placement": "scatter",
+    "budget": 28,
+    "contributesToSum": true,
+    "notes": "무리 등장. 가장 흔한 저레벨."
+  },
+  {
+    "id": "rat",
+    "name": "쥐",
+    "level": 1,
+    "color": "#b08968",
+    "glyph": "🐀",
+    "placement": "faces-anchor",
+    "budget": 10,
+    "contributesToSum": true,
+    "notes": "항상 쥐왕이 있는 열을 바라본다(방향 단서)."
+  },
+  {
+    "id": "gargoyle",
+    "name": "가고일",
+    "level": 4,
+    "color": "#7d8597",
+    "glyph": "🗿",
+    "placement": "pair",
+    "budget": 8,
+    "contributesToSum": true,
+    "notes": "항상 가로/세로 인접 쌍으로 등장. 한 마리 찾으면 짝 추론."
+  },
+  {
+    "id": "gazer",
+    "name": "가저",
+    "level": 5,
+    "color": "#2a9d8f",
+    "glyph": "👁",
+    "placement": "scatter",
+    "budget": 13,
+    "contributesToSum": true,
+    "notes": "주변 시야 단서."
+  },
+  {
+    "id": "ratking",
+    "name": "쥐왕",
+    "level": 5,
+    "color": "#8b5e34",
+    "glyph": "👑",
+    "placement": "column-anchor",
+    "budget": 1,
+    "contributesToSum": true,
+    "notes": "모든 쥐가 이 열을 향한다. 쥐 방향의 수렴점."
+  },
+  {
+    "id": "purpleslime",
+    "name": "보라 슬라임",
+    "level": 8,
+    "color": "#9b5de5",
+    "glyph": "🟣",
+    "placement": "scatter",
+    "budget": 18,
+    "contributesToSum": true,
+    "notes": "중간 고레벨."
+  },
+  {
+    "id": "lich",
+    "name": "리치",
+    "level": 11,
+    "color": "#588157",
+    "glyph": "💀",
+    "placement": "scatter",
+    "budget": 10,
+    "contributesToSum": true,
+    "notes": "고레벨 위협."
+  },
+  {
+    "id": "dragon",
+    "name": "드래곤",
+    "level": 15,
+    "color": "#e63946",
+    "glyph": "🐉",
+    "placement": "center-revealed",
+    "budget": 1,
+    "contributesToSum": true,
+    "notes": "중앙 고정·처음부터 공개. 처치 시 승리."
+  }
+]

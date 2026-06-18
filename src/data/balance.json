@@ -1,0 +1,34 @@
+{
+  "board": {
+    "width": 10,
+    "height": 13,
+    "zoneCount": 3,
+    "gemCount": 1,
+    "gemRadius": 2.0,
+    "gemBorderMargin": 2
+  },
+  "economy": {
+    "startHp": 5,
+    "maxHpPerLevel": 1,
+    "levelUpCostBase": 4,
+    "levelUpCostStep": 3,
+    "vitalityPerDamage": 1.0,
+    "goldPerDamageBase": 1.0,
+    "scorePerDamageBase": 1.0,
+    "levelUpBurstGoldPerHp": 0.5,
+    "dragonLevel": 15
+  },
+  "backpack": {
+    "width": 5,
+    "height": 5,
+    "cellsPerLevelUp": 1,
+    "sculptGoldCost": [20, 35, 55, 80, 110, 150]
+  },
+  "synergy": {
+    "lineBonusPerAligned": 1.0,
+    "isolationPenalty": 0.1,
+    "curseIsolateBonus": 0.25
+  },
+  "monsterLevelSet": [1, 4, 5, 8, 11],
+  "deductionLevelSet": [1, 4, 5, 8, 11]
+}

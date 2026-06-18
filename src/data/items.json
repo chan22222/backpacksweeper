@@ -1,0 +1,119 @@
+[
+  {
+    "id": "merchant-scale",
+    "name": "상인의 저울",
+    "category": "weapon",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
+    "synergyAxis": "line",
+    "lineDir": "col",
+    "glyph": "$",
+    "color": "#f4a261",
+    "desc": "처치 골드 환율 +25%. 같은 열에 정렬하면 선형 강화.",
+    "goldRateBonus": 0.25
+  },
+  {
+    "id": "whetstone-ring",
+    "name": "숫돌의 반지",
+    "category": "weapon",
+    "shape": [{ "x": 0, "y": 0 }],
+    "synergyAxis": "line",
+    "lineDir": "row",
+    "glyph": "o",
+    "color": "#e9c46a",
+    "desc": "처치 시 지불 Lv당 점수 +1. 같은 행에 정렬하면 선형 강화(클릭 횟수 아님).",
+    "scorePerLvBonus": 1
+  },
+  {
+    "id": "void-quiver",
+    "name": "공허의 화살집",
+    "category": "weapon",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 1, "y": 0 }, { "x": 2, "y": 0 }],
+    "synergyAxis": "void",
+    "glyph": "}",
+    "color": "#457b9d",
+    "desc": "직교 인접 빈 가방칸 1개당 처치 점수 +1. 여백을 둬야 강해진다.",
+    "scorePerVoidBonus": 1
+  },
+  {
+    "id": "counterweight",
+    "name": "계량추",
+    "category": "weapon",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
+    "synergyAxis": "none",
+    "glyph": "=",
+    "color": "#bc6c25",
+    "desc": "처치 Lv이 높을수록 골드 가산(+5%×Lv). 강칸 정확 처치를 보상.",
+    "goldLvScale": 0.05
+  },
+
+  {
+    "id": "gauntlet-guard",
+    "name": "장갑 토시",
+    "category": "defense",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 1, "y": 0 }],
+    "synergyAxis": "none",
+    "glyph": "+",
+    "color": "#6c757d",
+    "desc": "감당 불가 클릭 1회 무효화(판당, 캠프 충전). HP 보호 아님 — 입력 취소.",
+    "misclickGuard": true
+  },
+  {
+    "id": "sealing-lock",
+    "name": "봉인 자물쇠",
+    "category": "defense",
+    "shape": [{ "x": 0, "y": 0 }],
+    "synergyAxis": "isolation",
+    "glyph": "#",
+    "color": "#495057",
+    "desc": "돌출 슬롯에 단독 격리 시 오클릭 무효화 1회 추가.",
+    "misclickGuard": true
+  },
+  {
+    "id": "hazard-marker",
+    "name": "보강 장갑",
+    "category": "defense",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }, { "x": 1, "y": 1 }],
+    "synergyAxis": "none",
+    "glyph": "!",
+    "color": "#adb5bd",
+    "desc": "감당 불가 클릭 1회 무효화(판당, 캠프 충전). L자 형태.",
+    "misclickGuard": true
+  },
+
+  {
+    "id": "expansion-hinge",
+    "name": "확장 경첩",
+    "category": "special",
+    "shape": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
+    "synergyAxis": "none",
+    "glyph": "H",
+    "color": "#ffb703",
+    "desc": "캠프 조형 시 신규 가방 칸 +1(영구 공간 성장).",
+    "sculptBonus": 1
+  },
+  {
+    "id": "bloodthirst-curse",
+    "name": "피의 굶주림",
+    "category": "special",
+    "shape": [{ "x": 0, "y": 0 }],
+    "synergyAxis": "isolation",
+    "glyph": "X",
+    "color": "#9d0208",
+    "desc": "가방을 좀먹는 저주(이동 불가). 돌출 슬롯에 단독 격리하면 전체 점수 +25%로 역전.",
+    "isolationScoreBonus": 0.25,
+    "fixed": true
+  },
+  {
+    "id": "resonance-stone",
+    "name": "공명석",
+    "category": "special",
+    "shape": [{ "x": 0, "y": 0 }],
+    "synergyAxis": "line",
+    "lineDir": "row",
+    "glyph": "@",
+    "color": "#caf0f8",
+    "desc": "경제 하이브리드: 처치 점수 +0.5/Lv & 골드 환율 +10%(고정 덧셈).",
+    "scorePerLvBonus": 0.5,
+    "goldRateBonus": 0.1
+  }
+]
