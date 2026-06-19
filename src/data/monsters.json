@@ -1,25 +1,37 @@
 [
   {
-    "id": "bat",
-    "name": "박쥐",
-    "level": 1,
-    "color": "#9aa0a6",
-    "glyph": "🦇",
-    "placement": "scatter",
-    "budget": 28,
-    "contributesToSum": true,
-    "notes": "무리 등장. 가장 흔한 저레벨."
-  },
-  {
     "id": "rat",
     "name": "쥐",
     "level": 1,
     "color": "#b08968",
     "glyph": "🐀",
     "placement": "faces-anchor",
-    "budget": 10,
+    "anchor": "ratking",
+    "budget": 16,
     "contributesToSum": true,
     "notes": "항상 쥐왕이 있는 열을 바라본다(방향 단서)."
+  },
+  {
+    "id": "bat",
+    "name": "박쥐",
+    "level": 2,
+    "color": "#9aa0a6",
+    "glyph": "🦇",
+    "placement": "swarm",
+    "budget": 22,
+    "contributesToSum": true,
+    "notes": "무리(군집)로 몰려다닌다."
+  },
+  {
+    "id": "spider",
+    "name": "거미",
+    "level": 3,
+    "color": "#6d597a",
+    "glyph": "🕷",
+    "placement": "scatter",
+    "budget": 14,
+    "contributesToSum": true,
+    "notes": "곳곳에 흩어져 있다."
   },
   {
     "id": "gargoyle",
@@ -28,25 +40,26 @@
     "color": "#7d8597",
     "glyph": "🗿",
     "placement": "pair",
-    "budget": 8,
+    "budget": 6,
     "contributesToSum": true,
     "notes": "항상 가로/세로 인접 쌍으로 등장. 한 마리 찾으면 짝 추론."
   },
   {
-    "id": "gazer",
-    "name": "가저",
+    "id": "slime",
+    "name": "슬라임",
     "level": 5,
-    "color": "#2a9d8f",
-    "glyph": "👁",
-    "placement": "scatter",
-    "budget": 13,
+    "color": "#52b788",
+    "glyph": "🟢",
+    "placement": "surround-satellite",
+    "anchor": "ogre",
+    "budget": 12,
     "contributesToSum": true,
-    "notes": "주변 시야 단서."
+    "notes": "오우거를 둘러싸고 뭉쳐 있다."
   },
   {
     "id": "ratking",
     "name": "쥐왕",
-    "level": 5,
+    "level": 6,
     "color": "#8b5e34",
     "glyph": "👑",
     "placement": "column-anchor",
@@ -55,15 +68,48 @@
     "notes": "모든 쥐가 이 열을 향한다. 쥐 방향의 수렴점."
   },
   {
-    "id": "purpleslime",
-    "name": "보라 슬라임",
-    "level": 8,
-    "color": "#9b5de5",
-    "glyph": "🟣",
-    "placement": "scatter",
-    "budget": 18,
+    "id": "gazer",
+    "name": "가저",
+    "level": 7,
+    "color": "#2a9d8f",
+    "glyph": "👁",
+    "placement": "lonely",
+    "budget": 6,
     "contributesToSum": true,
-    "notes": "중간 고레벨."
+    "notes": "주변에 다른 몹이 없는 외딴 자리(둘러싼 숫자가 모두 7이면 가저)."
+  },
+  {
+    "id": "ogre",
+    "name": "오우거",
+    "level": 8,
+    "color": "#bc6c25",
+    "glyph": "👹",
+    "placement": "surround-anchor",
+    "budget": 4,
+    "contributesToSum": true,
+    "notes": "슬라임 무리에 둘러싸여 있다."
+  },
+  {
+    "id": "wraith",
+    "name": "망령",
+    "level": 9,
+    "color": "#a8b3c4",
+    "glyph": "👻",
+    "placement": "edge",
+    "budget": 6,
+    "contributesToSum": true,
+    "notes": "보드 가장자리(벽)에 출몰한다."
+  },
+  {
+    "id": "golem",
+    "name": "골렘",
+    "level": 10,
+    "color": "#9c6644",
+    "glyph": "🪨",
+    "placement": "scatter",
+    "budget": 5,
+    "contributesToSum": true,
+    "notes": "단단한 중량급. 흩어져 있다."
   },
   {
     "id": "lich",
@@ -71,10 +117,21 @@
     "level": 11,
     "color": "#588157",
     "glyph": "💀",
-    "placement": "scatter",
-    "budget": 10,
+    "placement": "deep",
+    "budget": 4,
     "contributesToSum": true,
-    "notes": "고레벨 위협."
+    "notes": "보드 중앙(드래곤 근처) 깊은 곳에 도사린다."
+  },
+  {
+    "id": "vampire",
+    "name": "뱀파이어",
+    "level": 13,
+    "color": "#9d0208",
+    "glyph": "🧛",
+    "placement": "scatter",
+    "budget": 3,
+    "contributesToSum": true,
+    "notes": "드물고 강력한 고레벨."
   },
   {
     "id": "dragon",

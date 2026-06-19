@@ -1,9 +1,15 @@
 {
   "board": {
-    "width": 10,
+    "width": 11,
     "height": 13,
     "zoneCount": 3,
     "gemCount": 1,
+    "extraGemCount": 0,
+    "lifeCount": 9,
+    "treasureCount": 5,
+    "rerollCount": 3,
+    "lifeHeal": 3,
+    "treasureExp": 5,
     "gemRadius": 2.0,
     "gemBorderMargin": 2
   },

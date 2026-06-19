@@ -41,9 +41,8 @@ describe('이중 트랙 결제 (기획서 §3)', () => {
     expect(zero.trackA_vitality).toBe(8);
     expect(loaded.trackA_vitality).toBe(8);
     expect(zero.hpCost).toBe(loaded.hpCost);
-    // 트랙 B는 가방이 증폭
+    // 트랙 B(골드)는 가방이 증폭
     expect(loaded.trackB_gold).toBeGreaterThan(zero.trackB_gold);
-    expect(loaded.trackB_score).toBeGreaterThan(zero.trackB_score);
   });
 
   it('lethal 판정: HP가 음수가 될 때만 사망(0은 생존)', () => {
@@ -53,15 +52,15 @@ describe('이중 트랙 결제 (기획서 §3)', () => {
     expect(resolvePayment('bat', 1, 0, syn({}), econ).lethal).toBe(true); // 0-1=-1 사망
   });
 
-  it('트랙 B 산식: 골드 환율/점수가 정확히 적용', () => {
+  it('트랙 B 산식: 모든 보상 시너지가 골드로 통합 적용', () => {
+    // base=8, flat=8(scorePerLv) → round((8*1.25 + 8)*1) = 18
     const r = resolvePayment('purpleslime', 8, 99, syn({ goldRateSum: 0.25, scorePerLvSum: 1 }), econ);
-    expect(r.trackB_gold).toBe(Math.round(8 * 1.25)); // 10
-    expect(r.trackB_score).toBe(8 + 8 * 1); // 16
+    expect(r.trackB_gold).toBe(18);
   });
 
-  it('void 점수는 처치당 고정(클릭 횟수 비례 아님 — §5.7)', () => {
+  it('여백 골드는 처치당 고정(클릭 횟수 비례 아님 — §5.7)', () => {
     const r = resolvePayment('bat', 1, 99, syn({ voidScoreFlat: 3 }), econ);
-    expect(r.trackB_score).toBe(1 + 3);
+    expect(r.trackB_gold).toBe(1 + 3);
   });
 
   it('경제 공식: 레벨업 비용/최대HP 곡선', () => {

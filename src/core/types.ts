@@ -18,7 +18,13 @@ export type PlacementRule =
   | 'pair' // 가로/세로 인접 쌍 (가고일)
   | 'center-revealed' // 중앙 고정 + 처음부터 공개 (드래곤)
   | 'column-anchor' // 자신이 속한 열을 다른 몬스터가 바라봄 (쥐왕)
-  | 'faces-anchor'; // 특정 앵커(쥐왕)의 열을 바라봄 (쥐)
+  | 'faces-anchor' // 특정 앵커의 열을 바라봄 (쥐 → 쥐왕)
+  | 'swarm' // 무리 군집 (박쥐)
+  | 'surround-anchor' // 위성 몹에게 둘러싸이는 중심 (오우거)
+  | 'surround-satellite' // 특정 앵커를 둘러쌈 (슬라임 → 오우거)
+  | 'lonely' // 인접에 몹이 없는 외딴 자리 (가저)
+  | 'edge' // 보드 가장자리(벽) (망령)
+  | 'deep'; // 중앙 구역 깊은 곳 (리치)
 
 export interface MonsterDef {
   id: string;
@@ -27,6 +33,8 @@ export interface MonsterDef {
   color: number; // 렌더 색상
   glyph: string; // 타일에 표시할 문자
   placement: PlacementRule;
+  /** faces-anchor/surround-satellite 가 참조하는 앵커 몹 id. */
+  anchor?: string;
   /** 이 종을 한 보드에 몇 마리 배치할지(가중/예산). pair 는 쌍 단위로 해석. */
   budget: number;
   /** 이 몬스터가 인접 숫자(adjacencySum)에 기여하는가. 드래곤은 공개되어 있으므로 기여하되 known 처리. */
@@ -35,6 +43,9 @@ export interface MonsterDef {
 }
 
 export type CellContent = 'empty' | 'monster';
+
+/** 보드 위 특수 픽업 종류. */
+export type PickupType = 'gem' | 'life' | 'treasure' | 'reroll';
 
 export interface Cell {
   pos: Vec2;
@@ -45,10 +56,10 @@ export interface Cell {
   revealed: boolean;
   /** 플레이어가 우클릭으로 단 숫자 메모(추리용). */
   note?: number;
-  /** 보석 칸인가(누르면 주변 원형 공개 — 무료 정찰). */
-  gem?: boolean;
-  /** 보석을 이미 사용했는가. */
-  gemUsed?: boolean;
+  /** 특수 픽업 칸: 보석(정찰) / 라이프(HP 회복) / 보물상자(경험치). */
+  pickup?: PickupType;
+  /** 픽업을 이미 사용했는가. */
+  pickupUsed?: boolean;
   /** 몬스터가 처치되었는가(공개되었으나 살아있는 몬스터와 구분). */
   dead?: boolean;
   /** 처치된 몬스터의 경험치/보상을 수확했는가(2번째 클릭). */
@@ -69,8 +80,7 @@ export interface PaymentResult {
   monsterLevel: number;
   hpCost: number; // 차감 HP (가방 개입 불가)
   trackA_vitality: number; // = hpCost (1:1, 빌드 무관, 결정론적)
-  trackB_gold: number; // 가방 증폭 후 골드
-  trackB_score: number; // 가방 증폭 후 점수
+  trackB_gold: number; // 가방 증폭 후 골드(보상)
   lethal: boolean; // 이 지불이 사망을 유발하는가 (HP 부족)
 }
 
@@ -166,8 +176,7 @@ export interface GameState {
   level: number;
   vitality: number; // 트랙 A 누적
   vitalityForLevel: number; // 현재 레벨에서 누적된 vitality
-  gold: number; // 트랙 B
-  score: number; // 트랙 B
+  gold: number; // 트랙 B(보상)
 
   // 쥐어짜기 보너스용(기획서 §7.2 — HP 비율 아님, 누적 소모량)
   hpSpentThisLevel: number;

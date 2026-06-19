@@ -13,7 +13,7 @@ function findAliveMonster(g: Game, id: string): Vec2 | null {
 
 function firstHiddenEmpty(g: Game): Vec2 {
   for (const c of g.state.board) {
-    if (c.content === 'empty' && !c.gem && !c.revealed) return c.pos;
+    if (c.content === 'empty' && !c.pickup && !c.revealed) return c.pos;
   }
   return { x: 0, y: 0 };
 }
@@ -28,13 +28,13 @@ describe('게임 통합 (코어 루프 — 보석 정찰)', () => {
     const revealed = g.state.board.filter((c) => c.revealed);
     expect(revealed.length).toBe(2);
     // 보석은 처음 1개만 발견(visible)
-    const visibleGems = g.state.board.filter((c) => c.gem && c.revealed);
+    const visibleGems = g.state.board.filter((c) => c.pickup === 'gem' && c.revealed);
     expect(visibleGems.length).toBe(1);
   });
 
   it('발견된 보석 클릭 → 주변 원형 공개(HP 소모 없는 정찰, 몬스터는 살아있음)', () => {
     const g = new Game(2024);
-    const gem = g.state.board.find((c) => c.gem && c.revealed)!;
+    const gem = g.state.board.find((c) => c.pickup === 'gem' && c.revealed)!;
     const before = g.state.hp;
     const r = g.click(gem.pos.x, gem.pos.y);
     expect(r.kind).toBe('revealed');
@@ -68,7 +68,7 @@ describe('게임 통합 (코어 루프 — 보석 정찰)', () => {
     g2.click(e1.x, e1.y);
     const bat = findAliveMonster(g1, 'bat');
     expect(bat).not.toBeNull();
-    // 1클릭: 처치(HP 지불, 보상 없음) → 2클릭: 수확(경험치/점수)
+    // 1클릭: 처치(HP 지불, 보상 없음) → 2클릭: 수확(경험치/골드)
     const d1 = g1.click(bat!.x, bat!.y);
     g2.click(bat!.x, bat!.y);
     expect(d1.kind).toBe('defeat');
@@ -78,7 +78,7 @@ describe('게임 통합 (코어 루프 — 보석 정찰)', () => {
 
     expect(g1.state.vitality).toBe(g2.state.vitality); // 트랙 A는 가방 무관
     expect(g1.state.vitality).toBeGreaterThan(0);
-    expect(g2.state.score).toBeGreaterThan(g1.state.score); // 트랙 B는 가방이 증폭
+    expect(g2.state.gold).toBeGreaterThan(g1.state.gold); // 트랙 B(골드)는 가방이 증폭
   });
 
   it('수동 레벨업: 성장 충전 후 유저가 직접 레벨업 → 완전 회복 + 최대 HP 증가 (자동 아님)', () => {

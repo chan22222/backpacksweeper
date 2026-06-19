@@ -6,13 +6,21 @@
  * 첫 클릭이 항상 0-숫자 칸이 되어 플러드 오프닝이 열린다(추측 도박 방지의 1차선).
  * (3칸 동시연립·체인 깊이 4 의 완전 Human-Solvable 솔버는 후속 과제로 명시.)
  */
-import type { Cell, MonsterDef, Vec2 } from './types';
+import type { Cell, MonsterDef, PickupType, Vec2 } from './types';
 
 export interface BoardConfig {
   width: number;
   height: number;
   zoneCount: number;
   gemCount: number;
+  /** 무작위 위치에 추가로 생성되는 숨김 보석 수. */
+  extraGemCount: number;
+  /** 라이프(하트) 픽업 수. */
+  lifeCount: number;
+  /** 보물상자 픽업 수. */
+  treasureCount: number;
+  /** 상점 새로고침(리롤) 픽업 수. */
+  rerollCount: number;
   /** 보석을 벽에서 최소 몇 칸 떨어뜨릴지(정찰 원이 보드 안에 다 들어오게). */
   gemBorderMargin: number;
   /** 보석 정찰 반경(약한 몹 구역 선정에 사용). */
@@ -152,26 +160,62 @@ export function generateBoard(
     return rng.shuffle(list);
   };
 
-  // 3) 쥐왕(column-anchor) 먼저 배치 → 열 기록
+  // ── 몹 배치: 기믹별 다단계 패스 ──
   let ratKingColumn: number | null = null;
-  const ratKing = monsters.find((m) => m.placement === 'column-anchor');
-  if (ratKing) {
-    for (let n = 0; n < ratKing.budget; n++) {
+  const anchorPos: Record<string, Vec2[]> = {};
+
+  // 패스 1: 앵커 (column-anchor=쥐왕, surround-anchor=오우거)
+  for (const m of monsters.filter((mm) => mm.placement === 'column-anchor' || mm.placement === 'surround-anchor')) {
+    anchorPos[m.id] = [];
+    for (let n = 0; n < m.budget; n++) {
       const cells = freeCells();
       if (cells.length === 0) break;
       const c = cells[0];
-      place(c.x, c.y, ratKing.id);
-      ratKingColumn = c.x;
+      place(c.x, c.y, m.id);
+      anchorPos[m.id].push(c);
+      if (m.placement === 'column-anchor') ratKingColumn = c.x;
     }
   }
 
-  // 4) 가고일(pair) 배치
+  // 패스 2a: faces-anchor (쥐 → 앵커의 열을 바라봄)
+  for (const m of monsters.filter((mm) => mm.placement === 'faces-anchor')) {
+    const list = m.anchor ? anchorPos[m.anchor] : undefined;
+    const col = list && list.length > 0 ? list[0].x : ratKingColumn;
+    for (let n = 0; n < m.budget; n++) {
+      const cells = freeCells();
+      if (cells.length === 0) break;
+      place(cells[0].x, cells[0].y, m.id);
+      if (col !== null) at(cells[0].x, cells[0].y).facesColumn = col;
+    }
+  }
+
+  // 패스 2b: surround-satellite (슬라임 → 오우거를 둘러쌈)
+  for (const m of monsters.filter((mm) => mm.placement === 'surround-satellite')) {
+    let remaining = m.budget;
+    const anchors = (m.anchor ? anchorPos[m.anchor] : undefined) ?? [];
+    for (const a of anchors) {
+      if (remaining <= 0) break;
+      const ring = rng.shuffle(neighbors8(a.x, a.y, w, h).filter((p) => isFree(p.x, p.y)));
+      for (const p of ring) {
+        if (remaining <= 0) break;
+        place(p.x, p.y, m.id);
+        remaining--;
+      }
+    }
+    while (remaining > 0) {
+      const cells = freeCells();
+      if (cells.length === 0) break;
+      place(cells[0].x, cells[0].y, m.id);
+      remaining--;
+    }
+  }
+
+  // 패스 3: pair (가고일 — 가로/세로 인접 쌍)
   for (const m of monsters.filter((mm) => mm.placement === 'pair')) {
     for (let n = 0; n < m.budget; n++) {
       const cells = freeCells();
       let placed = false;
       for (const c of cells) {
-        // 인접 free 칸이 있는 자리 찾기
         const adj = neighbors4(c.x, c.y, w, h).filter((p) => isFree(p.x, p.y));
         if (adj.length > 0) {
           const partner = rng.pick(adj);
@@ -185,18 +229,63 @@ export function generateBoard(
     }
   }
 
-  // 5) 쥐(faces-anchor) 배치 → 쥐왕 열을 바라봄
-  for (const m of monsters.filter((mm) => mm.placement === 'faces-anchor')) {
-    for (let n = 0; n < m.budget; n++) {
-      const cells = freeCells();
-      if (cells.length === 0) break;
-      const c = cells[0];
-      place(c.x, c.y, m.id);
-      if (ratKingColumn !== null) at(c.x, c.y).facesColumn = ratKingColumn;
+  // 패스 4: swarm (박쥐 — 무리 군집)
+  for (const m of monsters.filter((mm) => mm.placement === 'swarm')) {
+    let remaining = m.budget;
+    while (remaining > 0) {
+      const seeds = freeCells();
+      if (seeds.length === 0) break;
+      const seed = seeds[0];
+      place(seed.x, seed.y, m.id);
+      remaining--;
+      const ring = rng.shuffle(neighbors8(seed.x, seed.y, w, h).filter((p) => isFree(p.x, p.y)));
+      for (const p of ring) {
+        if (remaining <= 0) break;
+        if (rng.chance(0.7)) {
+          place(p.x, p.y, m.id);
+          remaining--;
+        }
+      }
     }
   }
 
-  // 6) 산포(scatter) 배치
+  // 패스 5: edge (망령 — 보드 가장자리)
+  for (const m of monsters.filter((mm) => mm.placement === 'edge')) {
+    for (let n = 0; n < m.budget; n++) {
+      const free = freeCells();
+      if (free.length === 0) break;
+      const edges = free.filter((p) => p.x === 0 || p.y === 0 || p.x === w - 1 || p.y === h - 1);
+      const t = edges.length > 0 ? edges[0] : free[0];
+      place(t.x, t.y, m.id);
+    }
+  }
+
+  // 패스 6: lonely (가저 — 인접에 몹이 없는 외딴 자리)
+  for (const m of monsters.filter((mm) => mm.placement === 'lonely')) {
+    for (let n = 0; n < m.budget; n++) {
+      const free = freeCells();
+      if (free.length === 0) break;
+      const isolated = free.filter((p) =>
+        neighbors8(p.x, p.y, w, h).every((q) => at(q.x, q.y).content !== 'monster'),
+      );
+      const t = isolated.length > 0 ? isolated[0] : free[0];
+      place(t.x, t.y, m.id);
+    }
+  }
+
+  // 패스 7: deep (리치 — 중앙 구역 깊은 곳)
+  const midZone = Math.floor(cfg.zoneCount / 2);
+  for (const m of monsters.filter((mm) => mm.placement === 'deep')) {
+    for (let n = 0; n < m.budget; n++) {
+      const free = freeCells();
+      if (free.length === 0) break;
+      const deep = free.filter((p) => zoneOf(p.x, cfg) === midZone);
+      const t = deep.length > 0 ? deep[0] : free[0];
+      place(t.x, t.y, m.id);
+    }
+  }
+
+  // 패스 8: scatter (나머지 — 거미/골렘/뱀파이어)
   for (const m of monsters.filter((mm) => mm.placement === 'scatter')) {
     for (let n = 0; n < m.budget; n++) {
       const cells = freeCells();
@@ -205,14 +294,41 @@ export function generateBoard(
     }
   }
 
-  // 7) 보석 배치 — 벽에서 margin 칸 이상 떨어진 '내부' 빈 칸 중,
-  //    정찰 반경 안의 몹이 '가장 약한'(레벨이 낮은) 자리에 우선 배치. 첫 정찰이 안전하도록.
+  // 7) 픽업 배치
   const margin = cfg.gemBorderMargin;
   const monById = new Map(monsters.map((mm) => [mm.id, mm]));
   const r2 = cfg.gemRadius * cfg.gemRadius;
-  const areaStrength = (cx: number, cy: number): number => {
+
+  // 같은 종류 픽업이 인접(8방향)해 있으면 배치 금지(서로 붙지 않게).
+  const adjacentToType = (i: number, type: PickupType): boolean => {
+    const p = board[i].pos;
+    return neighbors8(p.x, p.y, w, h).some((nb) => board[idx(nb.x, nb.y, w)].pickup === type);
+  };
+
+  // 7a) 하트/보물 먼저 — 무작위 빈 칸(같은 종류끼리 인접 금지), 숨김.
+  const anyEmpty: number[] = [];
+  for (let i = 0; i < board.length; i++) {
+    if (board[i].content === 'empty' && i !== dragonIdx) anyEmpty.push(i);
+  }
+  rng.shuffle(anyEmpty);
+  const placePickup = (count: number, type: PickupType) => {
+    let placed = 0;
+    for (let k = 0; k < anyEmpty.length && placed < count; k++) {
+      const i = anyEmpty[k];
+      if (board[i].pickup || adjacentToType(i, type)) continue;
+      board[i].pickup = type;
+      placed++;
+    }
+  };
+  placePickup(cfg.lifeCount, 'life');
+  placePickup(cfg.treasureCount, 'treasure');
+  placePickup(cfg.rerollCount, 'reroll');
+
+  // 7b) 영역 점수: 정찰 반경 내 '하트/보물/쥐왕'을 우선 회피, 그다음 '약한 몹'.
+  const areaScore = (cx: number, cy: number): number => {
     let maxLv = 0;
     let sum = 0;
+    let avoid = 0; // 하트/보물/쥐왕 = 시작 구역에서 피하고 싶은 것
     for (let yy = 0; yy < h; yy++) {
       for (let xx = 0; xx < w; xx++) {
         const dx = xx - cx;
@@ -220,29 +336,50 @@ export function generateBoard(
         if (dx * dx + dy * dy > r2) continue;
         const nc = board[idx(xx, yy, w)];
         if (nc.content === 'monster') {
-          const lv = monById.get(nc.monsterId!)?.level ?? 0;
+          const m = monById.get(nc.monsterId!);
+          const lv = m?.level ?? 0;
           maxLv = Math.max(maxLv, lv);
           sum += lv;
+          if (m?.placement === 'column-anchor') avoid++; // 쥐왕 회피
+        } else if (nc.pickup === 'life' || nc.pickup === 'treasure' || nc.pickup === 'reroll') {
+          avoid++;
         }
       }
     }
-    return maxLv * 1000 + sum; // 가장 센 몹(최대 레벨)이 지배, 합은 보조 기준
+    // 회피 대상(하트/보물/쥐왕)이 0순위 → 그다음 가장 센 몹(최대 레벨)·합.
+    return avoid * 100000 + maxLv * 1000 + sum;
   };
 
-  const interiorEmpty: number[] = [];
+  // 7c) 시작 보석: 벽에서 margin 떨어진 내부 빈(픽업 아닌) 칸 중,
+  //     점수가 가장 낮은(= 하트/보물 적고 약한 몹) 자리에 배치하고 공개.
+  const gemCandidates: number[] = [];
   for (let i = 0; i < board.length; i++) {
     const c = board[i];
-    if (c.content !== 'empty' || i === dragonIdx) continue;
+    if (c.content !== 'empty' || i === dragonIdx || c.pickup) continue;
     if (c.pos.x < margin || c.pos.x > w - 1 - margin || c.pos.y < margin || c.pos.y > h - 1 - margin) continue;
-    interiorEmpty.push(i);
+    gemCandidates.push(i);
   }
-  rng.shuffle(interiorEmpty); // 동점 시 무작위
-  interiorEmpty.sort((a, b) => areaStrength(board[a].pos.x, board[a].pos.y) - areaStrength(board[b].pos.x, board[b].pos.y));
+  rng.shuffle(gemCandidates); // 동점 무작위
+  gemCandidates.sort((a, b) => areaScore(board[a].pos.x, board[a].pos.y) - areaScore(board[b].pos.x, board[b].pos.y));
 
-  const gemsToPlace = Math.min(cfg.gemCount, interiorEmpty.length);
-  for (let n = 0; n < gemsToPlace; n++) board[interiorEmpty[n]].gem = true;
-  // 시작 보석 1개만 발견(visible) — 가장 약한 구역. 나머지는 정찰/공개로 번져나간다.
-  if (gemsToPlace > 0) board[interiorEmpty[0]].revealed = true;
+  let placedGems = 0;
+  for (let k = 0; k < gemCandidates.length && placedGems < cfg.gemCount; k++) {
+    const i = gemCandidates[k];
+    if (board[i].pickup || adjacentToType(i, 'gem')) continue;
+    board[i].pickup = 'gem';
+    board[i].revealed = true;
+    placedGems++;
+  }
+
+  // 7d) 추가 보석(있으면): 무작위 내부(픽업 아님·보석끼리 인접 금지), 숨김.
+  const extraPool = rng.shuffle([...gemCandidates]);
+  let placedExtra = 0;
+  for (let k = 0; k < extraPool.length && placedExtra < cfg.extraGemCount; k++) {
+    const i = extraPool[k];
+    if (board[i].pickup || adjacentToType(i, 'gem')) continue;
+    board[i].pickup = 'gem';
+    placedExtra++;
+  }
 
   // 8) 인접 숫자(레벨 총합) 계산
   computeAdjacencySums(board, w, h, monsters);

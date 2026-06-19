@@ -22,14 +22,24 @@ const boardCfg: BoardConfig = {
   height: balance.board.height,
   zoneCount: balance.board.zoneCount,
   gemCount: balance.board.gemCount,
+  extraGemCount: balance.board.extraGemCount,
+  lifeCount: balance.board.lifeCount,
+  treasureCount: balance.board.treasureCount,
+  rerollCount: balance.board.rerollCount,
   gemBorderMargin: balance.board.gemBorderMargin,
   gemRadius: balance.board.gemRadius,
 };
 const GEM_RADIUS = balance.board.gemRadius;
+const TREASURE_EXP = balance.board.treasureExp;
 
 export type ClickResult =
   | { kind: 'noop' }
   | { kind: 'revealed'; cells: Vec2[] }
+  | { kind: 'life'; pos: Vec2; heal: number }
+  | { kind: 'treasure-open'; pos: Vec2; exp: number }
+  | { kind: 'treasure'; pos: Vec2; exp: number }
+  | { kind: 'reroll-open'; pos: Vec2 } // 1클릭: 두루마리 정체 공개
+  | { kind: 'reroll'; pos: Vec2 } // 2클릭: 상점 새로고침 발동
   | { kind: 'guarded'; pos: Vec2 }
   | {
       // 1클릭: 처치(HP 지불). 몹 이미지·숫자는 시신으로 남고, 보상은 아직.
@@ -42,13 +52,12 @@ export type ClickResult =
       died: boolean;
     }
   | {
-      // 2클릭: 시신 수확(경험치/골드/점수). 이때 숫자 칸으로 바뀐다.
+      // 2클릭: 시신 수확(경험치/골드). 이때 숫자 칸으로 바뀐다.
       kind: 'collect';
       pos: Vec2;
       monsterId: string;
       vitality: number;
       gold: number;
-      score: number;
     };
 
 export interface LevelUpResult {
@@ -82,7 +91,6 @@ export class Game {
       vitality: 0,
       vitalityForLevel: 0,
       gold: 0,
-      score: 0,
       hpSpentThisLevel: 0,
       backpack,
       phase: 'playing',
@@ -128,12 +136,49 @@ export class Game {
     if (this.state.phase !== 'playing') return { kind: 'noop' };
     const c = this.cellAt(x, y);
 
-    // 발견된 보석: 주변을 원형으로 공개(전투 없는 무료 정찰). 정찰 영역의 보석은 발견되어 번져나간다.
-    if (c.gem && !c.gemUsed && c.revealed) {
-      c.gemUsed = true;
-      const cells = this.revealArea(x, y);
+    // 보물상자: 몹과 동일하게 '열기(1클릭) → 수확(2클릭)'. HP 비용은 없다.
+    if (c.pickup === 'treasure' && !c.collected) {
+      if (!c.dead) {
+        c.revealed = true;
+        c.dead = true; // 개봉됨(=시신과 동일한 수확 대기 상태)
+        this.state.turn++;
+        return { kind: 'treasure-open', pos: { x, y }, exp: TREASURE_EXP };
+      }
+      this.state.vitality += TREASURE_EXP;
+      this.state.vitalityForLevel += TREASURE_EXP;
+      c.collected = true;
       this.state.turn++;
-      return { kind: 'revealed', cells };
+      return { kind: 'treasure', pos: { x, y }, exp: TREASURE_EXP };
+    }
+
+    // 상점 새로고침 두루마리: 보물상자와 동일한 2단계(열기 → 발동). 효과는 씬이 처리.
+    if (c.pickup === 'reroll' && !c.collected) {
+      if (!c.dead) {
+        c.revealed = true;
+        c.dead = true; // 정체 공개(발동 대기)
+        this.state.turn++;
+        return { kind: 'reroll-open', pos: { x, y } };
+      }
+      c.collected = true;
+      this.state.turn++;
+      return { kind: 'reroll', pos: { x, y } };
+    }
+
+    // 발견된 보석/라이프 픽업(발견 후 1클릭 사용)
+    if ((c.pickup === 'gem' || c.pickup === 'life') && !c.pickupUsed && c.revealed) {
+      if (c.pickup === 'gem') {
+        c.pickupUsed = true;
+        this.state.turn++;
+        // 주변 원형 공개(전투 없는 무료 정찰). 정찰 영역의 픽업/몹이 발견된다.
+        return { kind: 'revealed', cells: this.revealArea(x, y) };
+      }
+      // 라이프: 풀피면 소비하지 않고 아껴둔다(무반응).
+      if (this.state.hp >= this.state.maxHp) return { kind: 'noop' };
+      c.pickupUsed = true;
+      this.state.turn++;
+      const heal = this.state.maxHp - this.state.hp;
+      this.state.hp = this.state.maxHp; // 완전 회복
+      return { kind: 'life', pos: { x, y }, heal };
     }
 
     // 공개된 처치 몬스터(미수확) → 2클릭: 경험치 수확
@@ -162,9 +207,10 @@ export class Game {
     const synergy = this.getSynergy();
     const payment = resolvePayment(def.id, def.level, this.state.hp, synergy, econ);
 
-    // 감당 불가 → 가드 있으면 입력 취소(HP 미지불), 없으면 그대로 사망.
+    // 감당 불가 → 가드 있으면 입력 취소(HP 미지불, 처치 안 함). 단 그 칸은 공개해 정체를 보여준다.
     if (payment.lethal && this.state.misclickGuards > 0) {
       this.state.misclickGuards--;
+      c.revealed = true; // 보석처럼: 무엇이 있었는지 드러난다(살아있는 몹으로 표시).
       return { kind: 'guarded', pos: { x, y } };
     }
 
@@ -193,8 +239,7 @@ export class Game {
       const z = c.zone;
       if (!this.state.clearedZones[z] && this.aliveMonstersInZone(z) === 0) {
         this.state.clearedZones[z] = true;
-        zoneCleared = z;
-        this.state.phase = 'full-camp';
+        zoneCleared = z; // 상점은 항상 탭으로 접근하므로 페이즈는 그대로 'playing'.
       }
     }
 
@@ -218,7 +263,6 @@ export class Game {
     this.state.vitality += payment.trackA_vitality;
     this.state.vitalityForLevel += payment.trackA_vitality;
     this.state.gold += payment.trackB_gold;
-    this.state.score += payment.trackB_score;
     c.collected = true;
     this.state.turn++;
 
@@ -228,7 +272,6 @@ export class Game {
       monsterId: def.id,
       vitality: payment.trackA_vitality,
       gold: payment.trackB_gold,
-      score: payment.trackB_score,
     };
   }
 
@@ -252,6 +295,11 @@ export class Game {
     const sculptGained = balance.backpack.cellsPerLevelUp + synergy.sculptBonus;
     this.state.pendingSculptCells += sculptGained;
     return { level: this.state.level, maxHp: this.state.maxHp, burstGold, sculptGained };
+  }
+
+  /** 유저가 원할 때 캠프(가방 정리·상점)를 연다. */
+  openCampManual(): void {
+    if (this.state.phase === 'playing') this.state.phase = 'full-camp';
   }
 
   /** 캠프 종료 → 진행 재개 + 가드 재충전. */

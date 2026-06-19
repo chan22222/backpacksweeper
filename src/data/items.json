@@ -8,7 +8,7 @@
     "lineDir": "col",
     "glyph": "$",
     "color": "#f4a261",
-    "desc": "처치 골드 환율 +25%. 같은 열에 정렬하면 선형 강화.",
+    "desc": "몹을 잡을 때 골드를 더 받아요 (+25%). 세로로 줄지어 놓으면 더 강해져요.",
     "goldRateBonus": 0.25
   },
   {
@@ -20,8 +20,9 @@
     "lineDir": "row",
     "glyph": "o",
     "color": "#e9c46a",
-    "desc": "처치 시 지불 Lv당 점수 +1. 같은 행에 정렬하면 선형 강화(클릭 횟수 아님).",
-    "scorePerLvBonus": 1
+    "desc": "몹을 잡을 때 골드를 더 받아요. 가로로 나란히 두면 더 강해져요.",
+    "scorePerLvBonus": 1,
+    "starter": true
   },
   {
     "id": "void-quiver",
@@ -31,7 +32,7 @@
     "synergyAxis": "void",
     "glyph": "}",
     "color": "#457b9d",
-    "desc": "직교 인접 빈 가방칸 1개당 처치 점수 +1. 여백을 둬야 강해진다.",
+    "desc": "주변에 빈 칸을 많이 둘수록 골드를 더 받아요.",
     "scorePerVoidBonus": 1
   },
   {
@@ -42,7 +43,7 @@
     "synergyAxis": "none",
     "glyph": "=",
     "color": "#bc6c25",
-    "desc": "처치 Lv이 높을수록 골드 가산(+5%×Lv). 강칸 정확 처치를 보상.",
+    "desc": "센 몹(높은 레벨)을 잡을수록 골드를 더 받아요.",
     "goldLvScale": 0.05
   },
 
@@ -54,8 +55,9 @@
     "synergyAxis": "none",
     "glyph": "+",
     "color": "#6c757d",
-    "desc": "감당 불가 클릭 1회 무효화(판당, 캠프 충전). HP 보호 아님 — 입력 취소.",
-    "misclickGuard": true
+    "desc": "죽을 뻔한 클릭을 1번 막아줘요(그 클릭이 취소돼요). 캠프에서 다시 채워져요.",
+    "misclickGuard": true,
+    "starter": true
   },
   {
     "id": "sealing-lock",
@@ -65,7 +67,7 @@
     "synergyAxis": "isolation",
     "glyph": "#",
     "color": "#495057",
-    "desc": "돌출 슬롯에 단독 격리 시 오클릭 무효화 1회 추가.",
+    "desc": "튀어나온 칸에 혼자 두면 '죽을 클릭 막기'를 1번 더 줘요.",
     "misclickGuard": true
   },
   {
@@ -76,7 +78,7 @@
     "synergyAxis": "none",
     "glyph": "!",
     "color": "#adb5bd",
-    "desc": "감당 불가 클릭 1회 무효화(판당, 캠프 충전). L자 형태.",
+    "desc": "죽을 뻔한 클릭을 1번 막아줘요. (L자 모양)",
     "misclickGuard": true
   },
 
@@ -88,7 +90,7 @@
     "synergyAxis": "none",
     "glyph": "H",
     "color": "#ffb703",
-    "desc": "캠프 조형 시 신규 가방 칸 +1(영구 공간 성장).",
+    "desc": "캠프에서 가방 칸을 1개 더 늘려줘요.",
     "sculptBonus": 1
   },
   {
@@ -99,7 +101,7 @@
     "synergyAxis": "isolation",
     "glyph": "X",
     "color": "#9d0208",
-    "desc": "가방을 좀먹는 저주(이동 불가). 돌출 슬롯에 단독 격리하면 전체 점수 +25%로 역전.",
+    "desc": "옮길 수 없는 저주. 튀어나온 칸에 혼자 가두면 골드 +25%로 역전돼요.",
     "isolationScoreBonus": 0.25,
     "fixed": true
   },
@@ -112,7 +114,7 @@
     "lineDir": "row",
     "glyph": "@",
     "color": "#caf0f8",
-    "desc": "경제 하이브리드: 처치 점수 +0.5/Lv & 골드 환율 +10%(고정 덧셈).",
+    "desc": "몹을 잡을 때 골드를 꾸준히 더 받아요.",
     "scorePerLvBonus": 0.5,
     "goldRateBonus": 0.1
   }

@@ -2,9 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { generateBoard, idx, neighbors8, type BoardConfig } from '../src/core/board';
 import { MONSTERS, getMonster } from '../src/data';
 
-const cfg: BoardConfig = { width: 10, height: 13, zoneCount: 3, gemCount: 1, gemBorderMargin: 2, gemRadius: 2.0 };
+const cfg: BoardConfig = {
+  width: 11,
+  height: 13,
+  zoneCount: 3,
+  gemCount: 1,
+  extraGemCount: 0,
+  lifeCount: 9,
+  treasureCount: 5,
+  rerollCount: 3,
+  gemBorderMargin: 2,
+  gemRadius: 2.0,
+};
 
 describe('보드 생성 (기획서 §2.1)', () => {
+  it('모든 몹 유형의 데미지(레벨)는 고유하다 — 숫자=정체 추리가 성립', () => {
+    const levels = MONSTERS.map((m) => m.level);
+    expect(new Set(levels).size).toBe(levels.length);
+  });
+
   it('결정론: 같은 시드 → 같은 보드', () => {
     const a = generateBoard(12345, cfg, MONSTERS);
     const b = generateBoard(12345, cfg, MONSTERS);
@@ -37,19 +53,42 @@ describe('보드 생성 (기획서 §2.1)', () => {
     expect(center.revealed).toBe(true);
   });
 
-  it('보석은 벽에서 2칸 이상 떨어진 내부 빈 칸에만 배치된다', () => {
+  it('보석은 벽에서 2칸 이상 떨어진 내부 빈 칸에만 배치된다(시작+추가)', () => {
     for (const seed of [7, 42, 100, 2024]) {
       const { board } = generateBoard(seed, cfg, MONSTERS);
-      const gems = board.filter((c) => c.gem);
-      expect(gems.length).toBe(cfg.gemCount);
+      const gems = board.filter((c) => c.pickup === 'gem');
+      expect(gems.length).toBe(cfg.gemCount + cfg.extraGemCount);
       for (const g of gems) {
         expect(g.content).toBe('empty');
-        // 벽에서 margin(2) 이상 떨어짐 → 정찰 원이 보드 안에 다 들어옴
         expect(g.pos.x).toBeGreaterThanOrEqual(2);
         expect(g.pos.x).toBeLessThanOrEqual(cfg.width - 3);
         expect(g.pos.y).toBeGreaterThanOrEqual(2);
         expect(g.pos.y).toBeLessThanOrEqual(cfg.height - 3);
       }
+    }
+  });
+
+  it('라이프·보물상자 픽업이 빈 칸에 배치되고, 같은 종류끼리 인접(8방향)하지 않는다', () => {
+    for (const seed of [7, 42, 100, 2024, 555]) {
+      const { board } = generateBoard(seed, cfg, MONSTERS);
+      const life = board.filter((c) => c.pickup === 'life');
+      const treasure = board.filter((c) => c.pickup === 'treasure');
+      expect(life.length).toBe(cfg.lifeCount);
+      expect(treasure.length).toBe(cfg.treasureCount);
+      for (const c of [...life, ...treasure]) expect(c.content).toBe('empty');
+
+      // 같은 종류 픽업끼리 8방향 인접 없음
+      const noAdjacent = (type: string) => {
+        for (const c of board) {
+          if (c.pickup !== type) continue;
+          for (const nb of neighbors8(c.pos.x, c.pos.y, cfg.width, cfg.height)) {
+            expect(board[idx(nb.x, nb.y, cfg.width)].pickup).not.toBe(type);
+          }
+        }
+      };
+      noAdjacent('gem');
+      noAdjacent('life');
+      noAdjacent('treasure');
     }
   });
 

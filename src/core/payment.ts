@@ -48,24 +48,18 @@ export function resolvePayment(
   // ★ 트랙 A: 가방 미적용. 지불 Lv 에만 비례.
   const trackA = Math.round(hpCost * econ.vitalityPerDamage);
 
-  // ★ 트랙 B: 가방 시너지 적용.
-  const gold = Math.round(
-    monsterLevel * econ.goldPerDamageBase * (1 + synergy.goldRateSum) +
-      monsterLevel * synergy.goldLvScaleSum,
-  );
-  const scoreBase =
-    monsterLevel * econ.scorePerDamageBase +
-    monsterLevel * synergy.scorePerLvSum +
-    synergy.voidScoreFlat;
-  const score = Math.max(0, Math.round(scoreBase * (1 + synergy.isolationBonus)));
+  // ★ 트랙 B(보상): 가방 시너지가 증폭하는 단일 통화 = 골드.
+  //   (과거 'score' 항목들은 게임 내 쓰임이 없어 모두 골드로 통합한다.)
+  const base = monsterLevel * econ.goldPerDamageBase;
+  const flat = monsterLevel * synergy.goldLvScaleSum + monsterLevel * synergy.scorePerLvSum + synergy.voidScoreFlat;
+  const gold = Math.max(0, Math.round((base * (1 + synergy.goldRateSum) + flat) * (1 + synergy.isolationBonus)));
 
   return {
     monsterId,
     monsterLevel,
     hpCost,
     trackA_vitality: trackA,
-    trackB_gold: Math.max(0, gold),
-    trackB_score: score,
+    trackB_gold: gold,
     // 사망은 HP가 음수가 될 때만(0은 생존 — 0까지 쥐어짜고 레벨업 가능).
     lethal: currentHp - hpCost < 0,
   };
