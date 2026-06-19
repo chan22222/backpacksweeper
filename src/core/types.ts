@@ -66,6 +66,10 @@ export interface Cell {
   collected?: boolean;
   /** 이 몬스터를 클릭하다 플레이어가 사망했는가(킬러 표시용). */
   killer?: boolean;
+  /** 드래곤 시신 수확 후 나타나는 승리의 왕관(클릭 시 승리). */
+  crown?: boolean;
+  /** 수확 보상을 강제할 유효 레벨(소환술사가 처치한 슬라임 = 2로 감소). */
+  rewardOverride?: number;
   /** 처음부터 공개되는 칸(드래곤). */
   preRevealed: boolean;
   /** 구역 인덱스(0..zoneCount-1). 풀 캠프 트리거용. */

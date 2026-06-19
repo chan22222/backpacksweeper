@@ -16,8 +16,9 @@ const cfg: BoardConfig = {
 };
 
 describe('보드 생성 (기획서 §2.1)', () => {
-  it('모든 몹 유형의 데미지(레벨)는 고유하다 — 숫자=정체 추리가 성립', () => {
-    const levels = MONSTERS.map((m) => m.level);
+  it('소환술사를 제외한 몹 데미지(레벨)는 고유하다 — 숫자=정체 추리가 성립', () => {
+    // 소환술사(ogre)는 의도적으로 거미(D3)와 같은 값으로 위장하고, 슬라임 군집+? 안개로 정체를 드러낸다.
+    const levels = MONSTERS.filter((m) => m.id !== 'ogre').map((m) => m.level);
     expect(new Set(levels).size).toBe(levels.length);
   });
 

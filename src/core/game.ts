@@ -4,7 +4,7 @@
  * Phaser 씬은 이 클래스의 상태를 읽어 렌더링하고, 입력을 메서드로 전달만 한다.
  */
 import { balance, MONSTERS, STARTER_ITEMS, getItem, getMonster } from '../data';
-import { computeAdjacencySums, generateBoard, idx, type BoardConfig } from './board';
+import { computeAdjacencySums, generateBoard, idx, neighbors8, type BoardConfig } from './board';
 import {
   autoPlace,
   computeSynergy,
@@ -40,6 +40,7 @@ export type ClickResult =
   | { kind: 'treasure'; pos: Vec2; exp: number }
   | { kind: 'reroll-open'; pos: Vec2 } // 1클릭: 두루마리 정체 공개
   | { kind: 'reroll'; pos: Vec2 } // 2클릭: 상점 새로고침 발동
+  | { kind: 'crown-win'; pos: Vec2 } // 드래곤 왕관 클릭 → 승리
   | { kind: 'guarded'; pos: Vec2 }
   | {
       // 1클릭: 처치(HP 지불). 몹 이미지·숫자는 시신으로 남고, 보상은 아직.
@@ -52,6 +53,8 @@ export type ClickResult =
       died: boolean;
       /** 쥐왕 처치 시 함께 공개된 쥐 칸들(연출용). */
       revealedCells?: Vec2[];
+      /** 소환술사 처치 시 보상 수확칸으로 전환된 슬라임 칸들(연출용). */
+      absorbedCells?: Vec2[];
     }
   | {
       // 2클릭: 시신 수확(경험치/골드). 이때 숫자 칸으로 바뀐다.
@@ -138,6 +141,13 @@ export class Game {
     if (this.state.phase !== 'playing') return { kind: 'noop' };
     const c = this.cellAt(x, y);
 
+    // 드래곤의 왕관: 누르면 승리.
+    if (c.crown) {
+      this.state.phase = 'won';
+      this.state.turn++;
+      return { kind: 'crown-win', pos: { x, y } };
+    }
+
     // 보물상자: 몹과 동일하게 '열기(1클릭) → 수확(2클릭)'. HP 비용은 없다.
     if (c.pickup === 'treasure' && !c.collected) {
       if (!c.dead) {
@@ -221,7 +231,23 @@ export class Game {
     c.revealed = true;
     c.dead = true;
     this.state.turn++;
-    // 처치된 몹은 합산에서 빠진다 → 주변 숫자 즉시 갱신.
+
+    // 소환술사 처치 → 둘러싼 슬라임을 전부 '보상 수확칸(시신)'으로 전환(보상은 2로 감소).
+    let absorbedCells: Vec2[] | undefined;
+    if (def.id === 'ogre') {
+      absorbedCells = [];
+      for (const p of neighbors8(x, y, this.state.width, this.state.height)) {
+        const nc = this.cellAt(p.x, p.y);
+        if (nc.content === 'monster' && nc.monsterId === 'slime' && !nc.dead) {
+          nc.revealed = true;
+          nc.dead = true; // 시신(수확 대기) — 직접 클릭해 보상 획득.
+          nc.rewardOverride = 2; // 소환술사가 잡은 슬라임 = 보상 2로 감소.
+          absorbedCells.push({ x: p.x, y: p.y });
+        }
+      }
+    }
+
+    // 처치된 몹/흡수된 슬라임은 합산에서 빠진다 → 주변 숫자 즉시 갱신.
     computeAdjacencySums(this.state.board, this.state.width, this.state.height, MONSTERS);
 
     // 쥐왕 처치 → 맵의 모든 쥐 위치 공개(드래곤스위퍼식 보상).
@@ -246,16 +272,14 @@ export class Game {
       c.killer = true; // 나를 죽인 몹 — 빨간 테두리로 표시
       this.state.phase = 'lost';
       this.state.hp = 0;
-    } else if (killedDragon) {
-      // 드래곤은 처치(생존)하면 즉시 승리(수확 불필요).
-      this.state.phase = 'won';
-    } else {
+    } else if (!killedDragon) {
       const z = c.zone;
       if (!this.state.clearedZones[z] && this.aliveMonstersInZone(z) === 0) {
         this.state.clearedZones[z] = true;
         zoneCleared = z; // 상점은 항상 탭으로 접근하므로 페이즈는 그대로 'playing'.
       }
     }
+    // 드래곤은 처치해도 즉시 승리하지 않는다 → 시신 수확(+15 EXP) → 왕관 → 왕관 클릭 시 승리.
 
     return {
       kind: 'defeat',
@@ -266,6 +290,7 @@ export class Game {
       killedDragon: killedDragon && !died,
       died,
       revealedCells,
+      absorbedCells,
     };
   }
 
@@ -273,13 +298,18 @@ export class Game {
   private collect(x: number, y: number, c: Cell): ClickResult {
     const def = getMonster(c.monsterId!);
     const synergy = this.getSynergy();
-    const payment = resolvePayment(def.id, def.level, this.state.hp, synergy, econ);
+    // 보상 레벨: 보통은 몹 레벨, 단 소환술사가 잡은 슬라임은 2로 감소(rewardOverride).
+    const rewardLv = c.rewardOverride ?? def.level;
+    const payment = resolvePayment(def.id, rewardLv, this.state.hp, synergy, econ);
 
     this.state.vitality += payment.trackA_vitality;
     this.state.vitalityForLevel += payment.trackA_vitality;
     this.state.gold += payment.trackB_gold;
     c.collected = true;
     this.state.turn++;
+
+    // 드래곤 시신을 수확하면(+15 EXP) 그 자리에 승리의 왕관이 나타난다.
+    if (def.placement === 'center-revealed') c.crown = true;
 
     return {
       kind: 'collect',

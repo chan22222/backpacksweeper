@@ -83,17 +83,6 @@
   },
 
   {
-    "id": "expansion-hinge",
-    "name": "확장 경첩",
-    "category": "special",
-    "shape": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
-    "synergyAxis": "none",
-    "glyph": "H",
-    "color": "#ffb703",
-    "desc": "캠프에서 가방 칸을 1개 더 늘려줘요.",
-    "sculptBonus": 1
-  },
-  {
     "id": "bloodthirst-curse",
     "name": "피의 굶주림",
     "category": "special",

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BOARD_ORIGIN, BP_CELL, BP_ORIGIN, COLORS, FONT, LAYOUT, TILE, VIEW } from '../config';
 import { Game, type ClickResult } from '../core/game';
+import { neighbors8 } from '../core/board';
 import { absoluteCells, bpCell, canPlace } from '../core/backpack';
 import type { SynergyResult } from '../core/backpack';
 import { balance, getItem, getMonster, ITEM_POOL, MONSTERS } from '../data';
@@ -56,10 +57,16 @@ export class GameScene extends Phaser.Scene {
   private tooltip!: Phaser.GameObjects.Container;
   private notePopup?: Phaser.GameObjects.Container;
   private helpModal?: Phaser.GameObjects.Container;
+  private adminReveal = false; // 테스트용 전체 맵 공개(렌더 전용, 상태 미변경)
+  private adminBtn?: Phaser.GameObjects.Text;
 
   private selectedItem: number | null = null;
+  private dragItemIdx: number | null = null;
+  private dragGrab = { x: 0, y: 0 };
+  private dragHover = { x: 0, y: 0 };
   private shop: ShopEntry[] = [];
   private shopRolls = 0; // 새로고침 횟수(시드) — 두루마리를 먹어야만 증가
+  private cellsPurchased = 0; // 상점에서 구매한 가방 칸 확장 수(비용 곡선용)
   private lastClick = { x: 0, y: 0 };
   private syn!: SynergyResult;
 
@@ -80,9 +87,12 @@ export class GameScene extends Phaser.Scene {
     this.tabBtns = [];
     this.tab = 'bag';
     this.selectedItem = null;
+    this.dragItemIdx = null;
     this.notePopup = undefined;
     this.helpModal = undefined;
+    this.adminReveal = false;
     this.shopRolls = 0;
+    this.cellsPurchased = 0;
 
     this.input.mouse?.disableContextMenu();
 
@@ -95,10 +105,13 @@ export class GameScene extends Phaser.Scene {
     this.buildCensus();
     this.buildTooltip();
     this.buildHelpButton();
+    this.buildAdminButton();
 
     this.fxLayer = this.add.container(0, 0).setDepth(60);
 
     this.input.on('pointerdown', this.onPointerDown, this);
+    this.input.on('pointermove', this.onPointerMove, this);
+    this.input.on('pointerup', this.onPointerUp, this);
     this.input.keyboard?.on('keydown-R', () => this.rotateSelected());
 
     this.rollShop(); // 초기 매물 1회. 이후엔 새로고침 두루마리로만 갱신.
@@ -242,7 +255,7 @@ export class GameScene extends Phaser.Scene {
     this.synText = this.add.text(effX, 312, '', { fontFamily: FONT, fontSize: '12px', color: COLORS.textDim, lineSpacing: 6, wordWrap: { width: 252 } });
     this.bagContent.add(this.synText);
 
-    const hint = this.add.text(effX, 452, '아이템에 마우스를 올리면 설명이 나와요.\n클릭 → 빈 칸 클릭으로 이동, R로 회전.', {
+    const hint = this.add.text(effX, 452, '아이템을 드래그해 옮기고, R 키로 회전해요.\n마우스를 올리면 설명이 나와요.\n🔒 잠긴 칸은 상점에서 "가방 칸 확장"으로 열 수 있어요.', {
       fontFamily: FONT,
       fontSize: '12px',
       color: COLORS.textFaint,
@@ -304,6 +317,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 가방 클릭: 아이템이면 드래그 시작, 우클릭이면 회전, 빈 칸이면 조형. */
   private onBpPointer(gx: number, gy: number, right: boolean): void {
     const bp = this.engine.state.backpack;
     const cell = bpCell(bp, gx, gy);
@@ -311,32 +325,56 @@ export class GameScene extends Phaser.Scene {
     const itemIdx = bp.items.findIndex((pl) => absoluteCells(bp, pl, getItem).some((p) => p.x === gx && p.y === gy));
 
     if (right) {
-      if (itemIdx >= 0) this.rotateItem(itemIdx);
-      this.redrawAll();
+      if (itemIdx >= 0) {
+        this.rotateItem(itemIdx);
+        this.redrawAll();
+      }
       return;
     }
-    if (this.selectedItem === null) {
-      if (itemIdx >= 0) this.selectedItem = itemIdx;
-      else if (!cell.active) this.trySculpt(gx, gy);
-    } else {
-      const pl = bp.items[this.selectedItem];
-      const def = getItem(pl.itemId);
-      if (def.fixed) {
-        this.selectedItem = null;
-      } else if (cell.active && canPlace(bp, def, { x: gx, y: gy }, pl.rotation, getItem, this.selectedItem)) {
-        pl.origin = { x: gx, y: gy };
-        this.selectedItem = null;
-        this.engine.refreshGuards();
-      } else if (itemIdx >= 0 && itemIdx !== this.selectedItem) {
-        this.selectedItem = itemIdx;
-      } else if (!cell.active) {
-        this.trySculpt(gx, gy);
-        this.selectedItem = null;
-      } else {
-        this.selectedItem = null;
-      }
+    if (itemIdx >= 0) {
+      const pl = bp.items[itemIdx];
+      if (getItem(pl.itemId).fixed) return; // 고정 아이템(저주)은 옮길 수 없음
+      // 드래그 시작 — 잡은 칸과 앵커의 상대 오프셋을 기억.
+      this.dragItemIdx = itemIdx;
+      this.selectedItem = itemIdx; // R 회전 대상
+      this.dragGrab = { x: gx - pl.origin.x, y: gy - pl.origin.y };
+      this.dragHover = { x: gx, y: gy };
+      this.redrawBackpack();
+    } else if (!cell.active) {
+      this.trySculpt(gx, gy);
+      this.redrawAll();
     }
+  }
+
+  private onPointerMove(pointer: Phaser.Input.Pointer): void {
+    if (this.dragItemIdx === null) return;
+    this.dragHover = {
+      x: Math.floor((pointer.x - BP_ORIGIN.x) / BP_CELL),
+      y: Math.floor((pointer.y - BP_ORIGIN.y) / BP_CELL),
+    };
+    this.redrawBackpack();
+  }
+
+  private onPointerUp(): void {
+    if (this.dragItemIdx === null) return;
+    const bp = this.engine.state.backpack;
+    const idx = this.dragItemIdx;
+    const pl = bp.items[idx];
+    const def = getItem(pl.itemId);
+    const origin = { x: this.dragHover.x - this.dragGrab.x, y: this.dragHover.y - this.dragGrab.y };
+    if (canPlace(bp, def, origin, pl.rotation, getItem, idx)) {
+      pl.origin = origin;
+      this.engine.refreshGuards();
+    }
+    this.dragItemIdx = null;
+    this.selectedItem = null;
     this.redrawAll();
+  }
+
+  /** 드래그 중인 아이템의 후보 앵커(없으면 null). */
+  private dragOrigin(): { x: number; y: number } | null {
+    if (this.dragItemIdx === null) return null;
+    return { x: this.dragHover.x - this.dragGrab.x, y: this.dragHover.y - this.dragGrab.y };
   }
 
   private rotateSelected(): void {
@@ -359,14 +397,20 @@ export class GameScene extends Phaser.Scene {
 
   private trySculpt(gx: number, gy: number): void {
     const st = this.engine.state;
-    const bp = st.backpack;
+    if (st.pendingSculptCells <= 0 || !this.bpUnlockable(gx, gy)) return;
+    const cell = bpCell(st.backpack, gx, gy);
+    if (!cell) return;
+    cell.active = true;
+    st.pendingSculptCells--;
+  }
+
+  /** 비활성 칸이 활성 칸과 4방향 인접해 확장 가능한가. */
+  private bpUnlockable(gx: number, gy: number): boolean {
+    const bp = this.engine.state.backpack;
     const cell = bpCell(bp, gx, gy);
-    if (!cell || cell.active || st.pendingSculptCells <= 0) return;
+    if (!cell || cell.active) return false;
     const adj = [bpCell(bp, gx, gy - 1), bpCell(bp, gx, gy + 1), bpCell(bp, gx - 1, gy), bpCell(bp, gx + 1, gy)];
-    if (adj.some((a) => a?.active)) {
-      cell.active = true;
-      st.pendingSculptCells--;
-    }
+    return adj.some((a) => a?.active);
   }
 
   private tryAutoPlace(item: ItemDef): boolean {
@@ -497,6 +541,15 @@ export class GameScene extends Phaser.Scene {
             this.animateReveal(res.revealedCells);
             this.floatText(VIEW.width / 2, 100, `👑 쥐왕 처치! 쥐 ${res.revealedCells.length}마리 위치 공개`, '#e7b65a', 24);
           }
+          // 소환술사 처치 → 둘러싼 슬라임이 보상 수확칸(◆2)으로 전환.
+          if (res.absorbedCells && res.absorbedCells.length > 0) {
+            this.animateReveal(res.absorbedCells);
+            this.floatText(VIEW.width / 2, 100, `🧙 소환술사 처치! 슬라임 ${res.absorbedCells.length}마리가 보상칸으로 (각 ◆2)`, '#7fd6a0', 22);
+          }
+          // 드래곤 처치(생존) → 시신 수확 유도.
+          if (res.killedDragon) {
+            this.floatText(c.x, c.y - 22, '드래곤을 쓰러뜨렸다! 시신을 수확하세요(+15 EXP)', '#e7b65a', 18);
+          }
         }
         break;
       }
@@ -505,6 +558,17 @@ export class GameScene extends Phaser.Scene {
         this.floatText(c.x - 14, c.y - 4, `+${res.vitality} EXP`, '#e7c78a', 22);
         if (res.gold > 0) this.floatText(c.x + 20, c.y + 14, `+${res.gold}G`, '#e7b65a', 22);
         this.redrawAll();
+        // 드래곤 시신을 수확하면 왕관 등장.
+        if (res.monsterId === 'dragon') {
+          this.floatText(VIEW.width / 2, 120, '👑 승리의 왕관이 나타났다! 왕관을 눌러 승리하세요', '#e7b65a', 22);
+        }
+        break;
+      }
+      case 'crown-win': {
+        this.engine.revealAll();
+        this.redrawAll();
+        const t = this.fmtTime(this.time.now - this.startMs);
+        this.floatText(VIEW.width / 2, 130, `🏆 클리어 타임 ${t}`, '#e7b65a', 30);
         break;
       }
       default:
@@ -634,6 +698,27 @@ export class GameScene extends Phaser.Scene {
     btn.on('pointerdown', () => this.openHelp());
   }
 
+  /** 임시 테스트용 — 우측 하단. 누르면 전체 맵을 미리 본다(렌더 전용 토글). */
+  private buildAdminButton(): void {
+    const btn = this.add
+      .text(VIEW.width - 14, VIEW.height - 14, '🔧 admin: 맵 공개', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: COLORS.textDim,
+        backgroundColor: '#15171f',
+        padding: { x: 10, y: 6 },
+      })
+      .setOrigin(1, 1)
+      .setDepth(50)
+      .setInteractive({ useHandCursor: true });
+    btn.on('pointerdown', () => {
+      this.adminReveal = !this.adminReveal;
+      this.adminBtn?.setText(this.adminReveal ? '🔧 admin: 가리기' : '🔧 admin: 맵 공개').setColor(this.adminReveal ? COLORS.goldText : COLORS.textDim);
+      this.redrawAll();
+    });
+    this.adminBtn = btn;
+  }
+
   private openHelp(): void {
     if (this.helpModal) return;
     const cx = VIEW.width / 2;
@@ -664,7 +749,7 @@ export class GameScene extends Phaser.Scene {
     // 좌/우 2열로 나눠 세로 넘침 방지(섹션 4 + 4 균형).
     const columns: Array<Array<{ h: string; b: string }>> = [
       [
-        { h: '🎯 목표', b: '던전을 탐험해 최종 보스 드래곤(D15)을 처치하면 승리해요. 반대로 내 HP가 음수가 되면 패배예요.' },
+        { h: '🎯 목표', b: '최종 보스 드래곤(D15)을 처치하고, 시신을 수확하면 나오는 👑왕관을 누르면 승리! 내 HP가 음수가 되면 패배예요.' },
         {
           h: '🔢 숫자가 핵심 (지뢰찾기 규칙)',
           b: '빈 칸의 숫자 = 그 칸 주변 8칸에 숨은 몬스터 데미지의 합계예요. 몹마다 데미지가 달라서 숫자로 정체를 추리할 수 있어요. (합이 0이면 숫자는 안 보여요.)',
@@ -690,7 +775,7 @@ export class GameScene extends Phaser.Scene {
         { h: '🖱️ 조작', b: '좌클릭=행동 · 우클릭=메모(예상 숫자) · R=아이템 회전' },
         {
           h: '💡 팁',
-          b: '쥐왕(👑)을 처치하면 맵의 모든 쥐(🐀) 위치가 공개돼요.\n슬라임(🟢)이 빙 둘러싼 한가운데엔 소환술사(🧙)가 숨어 있어요.',
+          b: '쥐(🐀)의 ←→ 화살표는 쥐왕(👑)이 있는 방향이에요. 쥐왕을 잡으면 모든 쥐가 공개돼요.\n슬라임(🟢)이 빙 둘러싼 한가운데엔 소환술사(🧙)가 숨어 있어요.',
         },
       ],
     ];
@@ -751,7 +836,32 @@ export class GameScene extends Phaser.Scene {
     const sx = BOARD_ORIGIN.x + x * TILE + TILE / 2;
     const sy = BOARD_ORIGIN.y + y * TILE + TILE / 2;
     text.setText('').setPosition(sx, sy).setFontSize(20);
-    icon.setText('').setAlpha(1).setPosition(sx, sy - 7);
+    icon.setText('').setAlpha(1).setColor(COLORS.text).setPosition(sx, sy - 7);
+
+    // admin 미리보기(렌더 전용): 미공개 칸의 내용을 파란 톤으로 엿본다(상태 변경 없음).
+    if (this.adminReveal && !cell.revealed && !cell.crown) {
+      rect.setFillStyle(COLORS.numbered);
+      rect.setStrokeStyle(1, 0x35507a);
+      if (cell.content === 'monster') {
+        const def = getMonster(cell.monsterId!);
+        icon.setText(def.glyph).setFontSize(18).setAlpha(0.85).setPosition(sx, sy - 7);
+        text.setText(String(def.level)).setColor('#6fb0ff').setFontSize(12).setPosition(sx, sy + 13);
+      } else if (cell.pickup) {
+        icon.setText(PICKUP_STYLE[cell.pickup].glyph).setColor('#6fb0ff').setFontSize(18).setPosition(sx, sy);
+      } else if (cell.adjacencySum > 0) {
+        text.setText(String(cell.adjacencySum)).setColor('#6fb0ff').setFontSize(16);
+      }
+      return;
+    }
+
+    // 드래곤 왕관: 클릭 시 승리(드래곤 시신 수확 후 등장).
+    if (cell.crown) {
+      rect.setFillStyle(COLORS.treasureFill);
+      rect.setStrokeStyle(2, COLORS.gold);
+      icon.setText('👑').setColor(COLORS.goldText).setFontSize(22).setPosition(sx, sy - 5);
+      text.setText('승리').setColor(COLORS.goldText).setFontSize(11).setPosition(sx, sy + 14);
+      return;
+    }
 
     // 보물상자: 미개봉=닫힌 상자(숫자 없음), 개봉=금화 + 경험치(수확 대기)
     if (cell.pickup === 'treasure' && !cell.collected) {
@@ -815,19 +925,30 @@ export class GameScene extends Phaser.Scene {
     if (cell.content === 'monster') {
       const def = getMonster(cell.monsterId!);
       const isDragon = cell.monsterId === 'dragon';
-      const alive = isDragon ? st.phase !== 'won' : !cell.dead;
+      const alive = !cell.dead; // 드래곤도 처치되면 시신(◆ 보상) → 수확 → 왕관 순서.
       if (alive) {
         rect.setFillStyle(COLORS.monsterTile);
-        rect.setStrokeStyle(isDragon ? 2 : 1, isDragon ? COLORS.gold : COLORS.border);
-        icon.setText(def.glyph).setFontSize(isDragon ? 24 : 20).setPosition(sx, sy - 7);
+        rect.setStrokeStyle(isDragon ? 2 : 1, COLORS.border);
+        // 쥐는 쥐왕이 있는 열 방향(←/→/↕)을 아이콘 옆에 표시(방향 단서).
+        if (cell.monsterId === 'rat' && cell.facesColumn !== undefined) {
+          this.drawRatIcon(icon, def.glyph, cell.facesColumn, x, sx, sy, 1);
+        } else {
+          icon.setText(def.glyph).setFontSize(isDragon ? 24 : 20).setPosition(sx, sy - 7);
+        }
         text.setText(String(def.level)).setColor(COLORS.goldText).setFontSize(13).setPosition(sx, sy + 13);
         return;
       }
       if (!cell.collected) {
+        // 미수확 시신: 골드 테두리 유지(처치 표식) + 숫자 왼쪽 ◆ 로 '수확할 보상 있음' 표시.
         rect.setFillStyle(COLORS.corpseTile);
         rect.setStrokeStyle(2, cell.killer ? COLORS.danger : COLORS.gold);
-        icon.setText(def.glyph).setFontSize(18).setAlpha(0.55).setPosition(sx, sy - 7);
-        text.setText(String(def.level)).setColor(COLORS.textFaint).setFontSize(12).setPosition(sx, sy + 13);
+        // 시신이 된 쥐도 방향 단서는 유지(쥐왕을 아직 못 찾았을 수 있으므로).
+        if (cell.monsterId === 'rat' && cell.facesColumn !== undefined) {
+          this.drawRatIcon(icon, def.glyph, cell.facesColumn, x, sx, sy, 0.55);
+        } else {
+          icon.setText(def.glyph).setFontSize(18).setAlpha(0.55).setPosition(sx, sy - 7);
+        }
+        text.setText(`◆${cell.rewardOverride ?? def.level}`).setColor(COLORS.goldText).setFontSize(13).setPosition(sx, sy + 13);
         return;
       }
     }
@@ -835,36 +956,77 @@ export class GameScene extends Phaser.Scene {
     // 숫자 타일 — 비활성처럼 흐리게 + 단일 색. 0이면 미표기.
     rect.setFillStyle(COLORS.numbered);
     rect.setStrokeStyle(1, COLORS.numberedBorder);
-    if (cell.adjacencySum > 0) {
+    // 슬라임에 인접한 칸은 합이 가려져 '?'로만 보인다(소환술사 군집의 안개).
+    if (this.adjacentToAliveSlime(x, y)) {
+      text.setText('?').setColor('#7fd6a0').setFontSize(18);
+    } else if (cell.adjacencySum > 0) {
       text.setText(String(cell.adjacencySum)).setColor(COLORS.numberText).setFontSize(18);
     }
+  }
+
+  /** 해당 칸이 살아있는 슬라임과 8방향으로 인접하는가(숫자 가림 판정). */
+  private adjacentToAliveSlime(x: number, y: number): boolean {
+    const st = this.engine.state;
+    return neighbors8(x, y, st.width, st.height).some((p) => {
+      const nc = this.engine.cellAt(p.x, p.y);
+      return nc.content === 'monster' && nc.monsterId === 'slime' && !nc.dead;
+    });
+  }
+
+  /** 쥐 아이콘 + 쥐왕 방향 화살표(←/→/↕)를 아이콘 옆에 그린다. */
+  private drawRatIcon(icon: Phaser.GameObjects.Text, glyph: string, facesColumn: number, x: number, sx: number, sy: number, alpha: number): void {
+    const left = facesColumn < x;
+    const arrow = left ? '←' : facesColumn > x ? '→' : '↕';
+    icon.setText(left ? `${arrow}${glyph}` : `${glyph}${arrow}`).setColor('#5fd6ea').setFontSize(18).setAlpha(alpha).setPosition(sx, sy - 7);
   }
 
   private redrawBackpack(): void {
     const bp = this.engine.state.backpack;
     const editable = this.tab === 'bag' && this.engine.state.phase === 'playing';
+    const canUnlock = editable && this.engine.state.pendingSculptCells > 0;
     for (let y = 0; y < bp.height; y++) {
       for (let x = 0; x < bp.width; x++) {
         const c = bp.cells[y * bp.width + x];
         const rect = this.bpRects[y * bp.width + x];
-        rect.setFillStyle(c.active ? (c.protruding ? COLORS.bpProtruding : COLORS.bpActive) : COLORS.bpInactive);
-        rect.setStrokeStyle(1, COLORS.border);
-        if (editable && !c.active && this.engine.state.pendingSculptCells > 0) rect.setStrokeStyle(1, COLORS.gold);
+        // 빨간(튀어나온) 칸 색 제거 — 활성은 모두 동일, 비활성은 잠금.
+        rect.setFillStyle(c.active ? COLORS.bpActive : COLORS.bpInactive);
+        rect.setStrokeStyle(1, c.active ? COLORS.border : COLORS.numberedBorder);
+        if (canUnlock && !c.active) rect.setStrokeStyle(1, COLORS.gold); // 확장 가능 칸 강조
       }
     }
 
     this.itemLayer.removeAll(true);
+
+    // 비활성 칸은 흐림 대신 자물쇠로 표시(확장 가능하면 골드 열쇠).
+    for (let y = 0; y < bp.height; y++) {
+      for (let x = 0; x < bp.width; x++) {
+        const c = bp.cells[y * bp.width + x];
+        if (c.active) continue;
+        const sx = BP_ORIGIN.x + x * BP_CELL + BP_CELL / 2;
+        const sy = BP_ORIGIN.y + y * BP_CELL + BP_CELL / 2;
+        const unlockable = canUnlock && this.bpUnlockable(x, y);
+        this.itemLayer.add(
+          this.add
+            .text(sx, sy, unlockable ? '🔓' : '🔒', { fontFamily: FONT, fontSize: '17px', color: COLORS.textFaint })
+            .setOrigin(0.5)
+            .setAlpha(unlockable ? 1 : 0.5),
+        );
+      }
+    }
     bp.items.forEach((pl, idx) => {
       const def = getItem(pl.itemId);
-      const cells = absoluteCells(bp, pl, getItem);
-      const selected = this.selectedItem === idx;
+      const dragging = this.dragItemIdx === idx;
+      const dorigin = dragging ? this.dragOrigin()! : pl.origin;
+      const cells = absoluteCells(bp, { itemId: pl.itemId, origin: dorigin, rotation: pl.rotation }, getItem);
+      const valid = !dragging || canPlace(bp, def, dorigin, pl.rotation, getItem, idx);
       for (const cc of cells) {
         const sx = BP_ORIGIN.x + cc.x * BP_CELL + BP_CELL / 2;
         const sy = BP_ORIGIN.y + cc.y * BP_CELL + BP_CELL / 2;
         const r = this.add
-          .rectangle(sx, sy, BP_CELL - 8, BP_CELL - 8, def.color, selected ? 1 : 0.9)
-          .setStrokeStyle(selected ? 3 : 1, selected ? 0xffffff : 0x10131d)
+          .rectangle(sx, sy, BP_CELL - 8, BP_CELL - 8, def.color, dragging ? 0.75 : 0.9)
           .setInteractive();
+        if (dragging) r.setStrokeStyle(3, valid ? 0x6ad08a : 0xe0563a);
+        else r.setStrokeStyle(1, 0x10131d);
         r.on('pointerover', () => this.showTooltip(def, sx, sy));
         r.on('pointerout', () => this.hideTooltip());
         this.itemLayer.add(r);
@@ -929,14 +1091,65 @@ export class GameScene extends Phaser.Scene {
       this.shopContent.add(this.makeShopCard(X, y, entry));
       y += 80;
     }
+    this.shopContent.add(this.makeExpansionCard(X, y));
+    y += 80;
     this.shopContent.add(
-      this.add.text(X, y + 4, '카드 클릭 = 구매. 매물은 맵의 🔄 두루마리를 먹어야 새로고침돼요.', {
+      this.add.text(X, y + 4, '아이템 매물은 맵의 🔄 두루마리로만 새로고침. 칸 확장은 언제든 구매 가능.', {
         fontFamily: FONT,
         fontSize: '12px',
         color: COLORS.textFaint,
         wordWrap: { width: 372 },
       }),
     );
+  }
+
+  /** 가방 칸 확장 판매 카드(레벨업 자동 지급 대신 상점 구매). */
+  private expansionCost(): number {
+    const arr = balance.backpack.sculptGoldCost as number[];
+    return arr[Math.min(this.cellsPurchased, arr.length - 1)];
+  }
+
+  private makeExpansionCard(x: number, y: number): Phaser.GameObjects.Container {
+    const w = 372;
+    const h = 70;
+    const cost = this.expansionCost();
+    const affordable = this.engine.state.gold >= cost;
+    const c = this.add.container(x, y);
+    const box = this.add
+      .rectangle(0, 0, w, h, COLORS.bpActive)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, affordable ? COLORS.gold : COLORS.border)
+      .setInteractive({ useHandCursor: true });
+    const name = this.add.text(12, 11, '🔓 가방 칸 확장', { fontFamily: FONT, fontSize: '16px', color: COLORS.text });
+    const price = this.add.text(w - 12, 11, `${cost} G`, { fontFamily: FONT, fontSize: '15px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);
+    const desc = this.add.text(12, 36, '잠긴 칸 1개를 열 권리를 얻어요. 구매 후 가방에서 🔓 칸을 클릭하세요.', {
+      fontFamily: FONT,
+      fontSize: '12px',
+      color: COLORS.textDim,
+      wordWrap: { width: w - 24 },
+      lineSpacing: 2,
+    });
+    c.add([box, name, price, desc]);
+    box.on('pointerover', () => box.setFillStyle(0x252d3c));
+    box.on('pointerout', () => box.setFillStyle(COLORS.bpActive));
+    box.on('pointerdown', () => this.buyExpansion());
+    return c;
+  }
+
+  private buyExpansion(): void {
+    const st = this.engine.state;
+    const cost = this.expansionCost();
+    if (st.gold < cost) {
+      this.floatText(790, 130, '골드가 부족해요', COLORS.goldText, 18);
+      this.cameras.main.shake(60, 0.0015);
+      return;
+    }
+    st.gold -= cost;
+    st.pendingSculptCells += 1;
+    this.cellsPurchased += 1;
+    this.floatText(790, 130, '칸 확장권 +1 — 가방의 🔓 칸을 누르세요', '#e7b65a', 16);
+    this.redrawShop();
+    this.redrawAll();
   }
 
   /** 매물 생성 — 새로고침 횟수(shopRolls)를 시드로 사용해 두루마리 사용 시에만 바뀐다. */
@@ -951,8 +1164,19 @@ export class GameScene extends Phaser.Scene {
   private makeShopCard(x: number, y: number, entry: ShopEntry): Phaser.GameObjects.Container {
     const w = 372;
     const h = 70;
-    const affordable = this.engine.state.gold >= entry.cost;
     const c = this.add.container(x, y);
+
+    // 이미 구매한 칸 — 골드 테두리 제거 + 흐리게 + SOLD OUT 표기(구매 불가 명확화).
+    if (entry.sold) {
+      const box = this.add.rectangle(0, 0, w, h, COLORS.bpInactive).setOrigin(0, 0).setStrokeStyle(1, COLORS.border);
+      const name = this.add.text(12, 11, entry.item.name, { fontFamily: FONT, fontSize: '16px', color: COLORS.textFaint });
+      const sold = this.add.text(w - 12, 11, 'SOLD OUT', { fontFamily: FONT, fontSize: '14px', color: '#6a7283' }).setOrigin(1, 0);
+      const desc = this.add.text(12, 36, entry.item.desc, { fontFamily: FONT, fontSize: '12px', color: COLORS.textFaint, wordWrap: { width: w - 24 }, lineSpacing: 2 }).setAlpha(0.6);
+      c.add([box, name, sold, desc]);
+      return c;
+    }
+
+    const affordable = this.engine.state.gold >= entry.cost;
     const box = this.add.rectangle(0, 0, w, h, COLORS.bpActive).setOrigin(0, 0).setStrokeStyle(1, affordable ? COLORS.gold : COLORS.border).setInteractive({ useHandCursor: true });
     const name = this.add.text(12, 11, entry.item.name, { fontFamily: FONT, fontSize: '16px', color: COLORS.text });
     const cost = this.add.text(w - 12, 11, `${entry.cost} G`, { fontFamily: FONT, fontSize: '15px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);

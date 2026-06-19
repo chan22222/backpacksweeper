@@ -27,7 +27,7 @@
   "backpack": {
     "width": 5,
     "height": 5,
-    "cellsPerLevelUp": 1,
+    "cellsPerLevelUp": 0,
     "sculptGoldCost": [20, 35, 55, 80, 110, 150]
   },
   "synergy": {
