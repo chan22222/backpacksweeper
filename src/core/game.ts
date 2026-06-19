@@ -50,6 +50,8 @@ export type ClickResult =
       zoneCleared: number | null;
       killedDragon: boolean;
       died: boolean;
+      /** 쥐왕 처치 시 함께 공개된 쥐 칸들(연출용). */
+      revealedCells?: Vec2[];
     }
   | {
       // 2클릭: 시신 수확(경험치/골드). 이때 숫자 칸으로 바뀐다.
@@ -222,6 +224,18 @@ export class Game {
     // 처치된 몹은 합산에서 빠진다 → 주변 숫자 즉시 갱신.
     computeAdjacencySums(this.state.board, this.state.width, this.state.height, MONSTERS);
 
+    // 쥐왕 처치 → 맵의 모든 쥐 위치 공개(드래곤스위퍼식 보상).
+    let revealedCells: Vec2[] | undefined;
+    if (def.id === 'ratking') {
+      revealedCells = [];
+      for (const cell of this.state.board) {
+        if (cell.content === 'monster' && cell.monsterId === 'rat' && !cell.revealed && !cell.dead) {
+          cell.revealed = true;
+          revealedCells.push({ x: cell.pos.x, y: cell.pos.y });
+        }
+      }
+    }
+
     const killedDragon = def.placement === 'center-revealed';
     let died = false;
     let zoneCleared: number | null = null;
@@ -251,6 +265,7 @@ export class Game {
       zoneCleared,
       killedDragon: killedDragon && !died,
       died,
+      revealedCells,
     };
   }
 

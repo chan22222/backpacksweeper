@@ -55,6 +55,7 @@ export class GameScene extends Phaser.Scene {
   private censusContent!: Phaser.GameObjects.Container;
   private tooltip!: Phaser.GameObjects.Container;
   private notePopup?: Phaser.GameObjects.Container;
+  private helpModal?: Phaser.GameObjects.Container;
 
   private selectedItem: number | null = null;
   private shop: ShopEntry[] = [];
@@ -80,6 +81,7 @@ export class GameScene extends Phaser.Scene {
     this.tab = 'bag';
     this.selectedItem = null;
     this.notePopup = undefined;
+    this.helpModal = undefined;
     this.shopRolls = 0;
 
     this.input.mouse?.disableContextMenu();
@@ -92,6 +94,7 @@ export class GameScene extends Phaser.Scene {
     this.buildShop();
     this.buildCensus();
     this.buildTooltip();
+    this.buildHelpButton();
 
     this.fxLayer = this.add.container(0, 0).setDepth(60);
 
@@ -291,7 +294,7 @@ export class GameScene extends Phaser.Scene {
 
   /** 씬 레벨 입력 — 가방 탭에서 가방 편집. */
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
-    if (this.notePopup) return;
+    if (this.notePopup || this.helpModal) return;
     if (this.engine.state.phase !== 'playing' || this.tab !== 'bag') return;
     const st = this.engine.state;
     const gx = Math.floor((pointer.x - BP_ORIGIN.x) / BP_CELL);
@@ -489,6 +492,11 @@ export class GameScene extends Phaser.Scene {
           this.floatText(VIEW.width / 2, 130, msg, st.phase === 'won' ? '#e7b65a' : '#ff6b78', 30);
         } else {
           this.redrawAll();
+          // 쥐왕 처치 → 공개된 쥐들 연출 + 안내.
+          if (res.revealedCells && res.revealedCells.length > 0) {
+            this.animateReveal(res.revealedCells);
+            this.floatText(VIEW.width / 2, 100, `👑 쥐왕 처치! 쥐 ${res.revealedCells.length}마리 위치 공개`, '#e7b65a', 24);
+          }
         }
         break;
       }
@@ -603,6 +611,119 @@ export class GameScene extends Phaser.Scene {
     if (this.notePopup) {
       this.notePopup.destroy(true);
       this.notePopup = undefined;
+    }
+  }
+
+  // ----------------------------- 도움말 -----------------------------
+
+  /** 상단 우측 도움말 버튼(빈 상단 스트립에 배치). */
+  private buildHelpButton(): void {
+    const btn = this.add
+      .text(VIEW.width - 16, 30, '❓ 게임 설명', {
+        fontFamily: FONT,
+        fontSize: '15px',
+        color: COLORS.goldText,
+        backgroundColor: '#191d29',
+        padding: { x: 12, y: 7 },
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(50)
+      .setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setBackgroundColor('#252d3c'));
+    btn.on('pointerout', () => btn.setBackgroundColor('#191d29'));
+    btn.on('pointerdown', () => this.openHelp());
+  }
+
+  private openHelp(): void {
+    if (this.helpModal) return;
+    const cx = VIEW.width / 2;
+    const cy = VIEW.height / 2;
+    const w = 760;
+    const h = 650;
+    const left = cx - w / 2;
+    const top = cy - h / 2;
+
+    const c = this.add.container(0, 0).setDepth(120);
+    const overlay = this.add.rectangle(cx, cy, VIEW.width, VIEW.height, COLORS.bgInk, 0.74).setInteractive();
+    overlay.on('pointerdown', () => this.closeHelp());
+    const shadow = this.add.rectangle(cx + 4, cy + 7, w, h, COLORS.bgInk, 0.5);
+    const panel = this.add.rectangle(cx, cy, w, h, COLORS.panel, 1).setStrokeStyle(1, COLORS.panelEdge).setInteractive();
+    const rule = this.add.rectangle(left + 10, top + 3, w - 20, 2, COLORS.gold, 0.45).setOrigin(0, 0.5);
+    c.add([overlay, shadow, panel, rule]);
+
+    c.add(this.add.text(left + 28, top + 28, '게임 설명', { fontFamily: FONT, fontSize: '23px', color: COLORS.goldText }).setOrigin(0, 0.5));
+    const closeBtn = this.add
+      .text(left + w - 24, top + 28, '✕', { fontFamily: FONT, fontSize: '20px', color: COLORS.textDim })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerover', () => closeBtn.setColor('#ffffff'));
+    closeBtn.on('pointerout', () => closeBtn.setColor(COLORS.textDim));
+    closeBtn.on('pointerdown', () => this.closeHelp());
+    c.add(closeBtn);
+
+    // 좌/우 2열로 나눠 세로 넘침 방지(섹션 4 + 4 균형).
+    const columns: Array<Array<{ h: string; b: string }>> = [
+      [
+        { h: '🎯 목표', b: '던전을 탐험해 최종 보스 드래곤(D15)을 처치하면 승리해요. 반대로 내 HP가 음수가 되면 패배예요.' },
+        {
+          h: '🔢 숫자가 핵심 (지뢰찾기 규칙)',
+          b: '빈 칸의 숫자 = 그 칸 주변 8칸에 숨은 몬스터 데미지의 합계예요. 몹마다 데미지가 달라서 숫자로 정체를 추리할 수 있어요. (합이 0이면 숫자는 안 보여요.)',
+        },
+        {
+          h: '⚔️ 몹 처치 — HP가 곧 화폐',
+          b: '몹을 클릭하면 데미지만큼 HP를 내고 처치(1클릭), 한 번 더 누르면 경험치·골드를 수확해요(2클릭). 내 HP보다 센 몹을 치면 죽으니 조심하세요.',
+        },
+        {
+          h: '⬆️ 성장과 레벨업',
+          b: '경험치가 차면 [레벨업] 버튼이 켜져요. 누르면 HP가 완전 회복되고 최대 HP도 늘어요. HP를 거의 다 쓴 뒤 레벨업하는 게 효율적이에요.',
+        },
+      ],
+      [
+        {
+          h: '✨ 특수 칸',
+          b: '🔷 보석 — 주변을 원형으로 정찰\n❤ 하트 — HP 완전 회복\n📦 상자 — 열어 경험치 획득(2클릭)\n🔄 두루마리 — 상점 매물 새로고침(2클릭)',
+        },
+        {
+          h: '🎒 가방·상점',
+          b: '상점에서 골드로 아이템을 사 가방에 넣으면 골드 보상이 커져요(생존 HP엔 영향 없음). 모양·배치에 따라 효과가 달라져요.',
+        },
+        { h: '🖱️ 조작', b: '좌클릭=행동 · 우클릭=메모(예상 숫자) · R=아이템 회전' },
+        {
+          h: '💡 팁',
+          b: '쥐왕(👑)을 처치하면 맵의 모든 쥐(🐀) 위치가 공개돼요.\n슬라임(🟢)이 빙 둘러싼 한가운데엔 소환술사(🧙)가 숨어 있어요.',
+        },
+      ],
+    ];
+
+    const colX = [left + 28, left + w / 2 + 6];
+    const bodyW = w / 2 - 40;
+    columns.forEach((col, ci) => {
+      let y = top + 64;
+      for (const s of col) {
+        const head = this.add.text(colX[ci], y, s.h, { fontFamily: FONT, fontSize: '15px', color: '#e7c78a' });
+        c.add(head);
+        y += head.height + 3;
+        const body = this.add.text(colX[ci], y, s.b, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: COLORS.textDim,
+          wordWrap: { width: bodyW },
+          lineSpacing: 4,
+        });
+        c.add(body);
+        y += body.height + 12;
+      }
+    });
+
+    c.add(this.add.text(cx, top + h - 18, '바깥 영역이나 ✕ 를 누르면 닫혀요', { fontFamily: FONT, fontSize: '12px', color: COLORS.textFaint }).setOrigin(0.5));
+
+    this.helpModal = c;
+  }
+
+  private closeHelp(): void {
+    if (this.helpModal) {
+      this.helpModal.destroy(true);
+      this.helpModal = undefined;
     }
   }
 

@@ -164,7 +164,7 @@ export function generateBoard(
   let ratKingColumn: number | null = null;
   const anchorPos: Record<string, Vec2[]> = {};
 
-  // 패스 1: 앵커 (column-anchor=쥐왕, surround-anchor=오우거)
+  // 패스 1: 앵커 (column-anchor=쥐왕, surround-anchor=소환술사)
   for (const m of monsters.filter((mm) => mm.placement === 'column-anchor' || mm.placement === 'surround-anchor')) {
     anchorPos[m.id] = [];
     for (let n = 0; n < m.budget; n++) {
@@ -189,7 +189,7 @@ export function generateBoard(
     }
   }
 
-  // 패스 2b: surround-satellite (슬라임 → 오우거를 둘러쌈)
+  // 패스 2b: surround-satellite (슬라임 → 소환술사를 둘러쌈)
   for (const m of monsters.filter((mm) => mm.placement === 'surround-satellite')) {
     let remaining = m.budget;
     const anchors = (m.anchor ? anchorPos[m.anchor] : undefined) ?? [];

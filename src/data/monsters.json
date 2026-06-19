@@ -52,9 +52,9 @@
     "glyph": "🟢",
     "placement": "surround-satellite",
     "anchor": "ogre",
-    "budget": 12,
+    "budget": 8,
     "contributesToSum": true,
-    "notes": "오우거를 둘러싸고 뭉쳐 있다."
+    "notes": "소환술사가 불러낸 무리. 소환술사를 빙 둘러싸고 있다."
   },
   {
     "id": "ratking",
@@ -80,14 +80,14 @@
   },
   {
     "id": "ogre",
-    "name": "오우거",
+    "name": "소환술사",
     "level": 8,
     "color": "#bc6c25",
-    "glyph": "👹",
+    "glyph": "🧙",
     "placement": "surround-anchor",
-    "budget": 4,
+    "budget": 1,
     "contributesToSum": true,
-    "notes": "슬라임 무리에 둘러싸여 있다."
+    "notes": "맵에 단 하나. 슬라임 무리를 소환해 자신을 둘러싸게 한다(슬라임이 보이면 그 한가운데에 있다)."
   },
   {
     "id": "wraith",
