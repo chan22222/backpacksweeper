@@ -1086,15 +1086,17 @@ export class GameScene extends Phaser.Scene {
     this.shopContent.add(
       this.add.text(X, 288, `상점   ·   보유 골드 ${st.gold}`, { fontFamily: FONT, fontSize: '15px', color: COLORS.goldText }).setOrigin(0, 0.5),
     );
-    let y = 316;
+    const CARD_H = 54;
+    const STEP = 62;
+    let y = 312;
     for (const entry of this.shop) {
-      this.shopContent.add(this.makeShopCard(X, y, entry));
-      y += 80;
+      this.shopContent.add(this.makeShopCard(X, y, entry, CARD_H));
+      y += STEP;
     }
-    this.shopContent.add(this.makeExpansionCard(X, y));
-    y += 80;
+    this.shopContent.add(this.makeExpansionCard(X, y, CARD_H));
+    y += STEP;
     this.shopContent.add(
-      this.add.text(X, y + 4, '아이템 매물은 맵의 🔄 두루마리로만 새로고침. 칸 확장은 언제든 구매 가능.', {
+      this.add.text(X, y, '🔄 두루마리로 매물 새로고침 · 칸 확장은 상시 구매', {
         fontFamily: FONT,
         fontSize: '12px',
         color: COLORS.textFaint,
@@ -1109,9 +1111,8 @@ export class GameScene extends Phaser.Scene {
     return arr[Math.min(this.cellsPurchased, arr.length - 1)];
   }
 
-  private makeExpansionCard(x: number, y: number): Phaser.GameObjects.Container {
+  private makeExpansionCard(x: number, y: number, h: number): Phaser.GameObjects.Container {
     const w = 372;
-    const h = 70;
     const cost = this.expansionCost();
     const affordable = this.engine.state.gold >= cost;
     const c = this.add.container(x, y);
@@ -1120,14 +1121,13 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setStrokeStyle(1, affordable ? COLORS.gold : COLORS.border)
       .setInteractive({ useHandCursor: true });
-    const name = this.add.text(12, 11, '🔓 가방 칸 확장', { fontFamily: FONT, fontSize: '16px', color: COLORS.text });
-    const price = this.add.text(w - 12, 11, `${cost} G`, { fontFamily: FONT, fontSize: '15px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);
-    const desc = this.add.text(12, 36, '잠긴 칸 1개를 열 권리를 얻어요. 구매 후 가방에서 🔓 칸을 클릭하세요.', {
+    const name = this.add.text(11, 8, '🔓 가방 칸 확장', { fontFamily: FONT, fontSize: '15px', color: COLORS.text });
+    const price = this.add.text(w - 11, 9, `${cost} G`, { fontFamily: FONT, fontSize: '14px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);
+    const desc = this.add.text(11, 30, '잠긴 칸 1개를 열 권리. 가방의 🔓 칸을 클릭하세요.', {
       fontFamily: FONT,
-      fontSize: '12px',
+      fontSize: '11px',
       color: COLORS.textDim,
-      wordWrap: { width: w - 24 },
-      lineSpacing: 2,
+      wordWrap: { width: w - 22 },
     });
     c.add([box, name, price, desc]);
     box.on('pointerover', () => box.setFillStyle(0x252d3c));
@@ -1161,26 +1161,25 @@ export class GameScene extends Phaser.Scene {
       .map((item) => ({ item, cost: SHOP_COST[item.category] ?? 30, sold: false }));
   }
 
-  private makeShopCard(x: number, y: number, entry: ShopEntry): Phaser.GameObjects.Container {
+  private makeShopCard(x: number, y: number, entry: ShopEntry, h: number): Phaser.GameObjects.Container {
     const w = 372;
-    const h = 70;
     const c = this.add.container(x, y);
 
     // 이미 구매한 칸 — 골드 테두리 제거 + 흐리게 + SOLD OUT 표기(구매 불가 명확화).
     if (entry.sold) {
       const box = this.add.rectangle(0, 0, w, h, COLORS.bpInactive).setOrigin(0, 0).setStrokeStyle(1, COLORS.border);
-      const name = this.add.text(12, 11, entry.item.name, { fontFamily: FONT, fontSize: '16px', color: COLORS.textFaint });
-      const sold = this.add.text(w - 12, 11, 'SOLD OUT', { fontFamily: FONT, fontSize: '14px', color: '#6a7283' }).setOrigin(1, 0);
-      const desc = this.add.text(12, 36, entry.item.desc, { fontFamily: FONT, fontSize: '12px', color: COLORS.textFaint, wordWrap: { width: w - 24 }, lineSpacing: 2 }).setAlpha(0.6);
+      const name = this.add.text(11, 8, entry.item.name, { fontFamily: FONT, fontSize: '15px', color: COLORS.textFaint });
+      const sold = this.add.text(w - 11, 9, 'SOLD OUT', { fontFamily: FONT, fontSize: '13px', color: '#6a7283' }).setOrigin(1, 0);
+      const desc = this.add.text(11, 30, entry.item.desc, { fontFamily: FONT, fontSize: '11px', color: COLORS.textFaint, wordWrap: { width: w - 22 } }).setAlpha(0.6);
       c.add([box, name, sold, desc]);
       return c;
     }
 
     const affordable = this.engine.state.gold >= entry.cost;
     const box = this.add.rectangle(0, 0, w, h, COLORS.bpActive).setOrigin(0, 0).setStrokeStyle(1, affordable ? COLORS.gold : COLORS.border).setInteractive({ useHandCursor: true });
-    const name = this.add.text(12, 11, entry.item.name, { fontFamily: FONT, fontSize: '16px', color: COLORS.text });
-    const cost = this.add.text(w - 12, 11, `${entry.cost} G`, { fontFamily: FONT, fontSize: '15px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);
-    const desc = this.add.text(12, 36, entry.item.desc, { fontFamily: FONT, fontSize: '12px', color: COLORS.textDim, wordWrap: { width: w - 24 }, lineSpacing: 2 });
+    const name = this.add.text(11, 8, entry.item.name, { fontFamily: FONT, fontSize: '15px', color: COLORS.text });
+    const cost = this.add.text(w - 11, 9, `${entry.cost} G`, { fontFamily: FONT, fontSize: '14px', color: affordable ? COLORS.goldText : COLORS.textFaint }).setOrigin(1, 0);
+    const desc = this.add.text(11, 30, entry.item.desc, { fontFamily: FONT, fontSize: '11px', color: COLORS.textDim, wordWrap: { width: w - 22 } });
     c.add([box, name, cost, desc]);
     box.on('pointerover', () => box.setFillStyle(0x252d3c));
     box.on('pointerout', () => box.setFillStyle(COLORS.bpActive));
