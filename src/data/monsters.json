@@ -81,7 +81,7 @@
   {
     "id": "ogre",
     "name": "소환술사",
-    "level": 3,
+    "level": 1,
     "color": "#bc6c25",
     "glyph": "🧙",
     "placement": "surround-anchor",
